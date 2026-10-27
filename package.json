@@ -1,0 +1,12 @@
+{
+  "name": "dynamicqr",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AttendX dynamic QR event attendance system",
+  "scripts": {
+    "dev:api": "npm --prefix backend run dev",
+    "dev:web": "npm --prefix frontend run dev",
+    "build:web": "npm --prefix frontend run build",
+    "seed": "npm --prefix backend run seed"
+  }
+}

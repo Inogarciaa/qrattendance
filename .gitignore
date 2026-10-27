@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Expo
+.expo/
+.expo-shared/
+mobile/.expo/
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# Thesis files kept locally only
+/Dynamic QR Attendance.pdf
+/docs/Thesis_Chapter_1_and_2_Dynamic_QR.docx
