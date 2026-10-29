@@ -19,6 +19,30 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Secrets and keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+.npmrc
+google-services.json
+GoogleService-Info.plist
+
+# Test / build caches
+coverage/
+.cache/
+.turbo/
+*.tsbuildinfo
+
+# Local uploads and database backups (may contain real data)
+uploads/
+*.dump
+*.backup
+*.sql.gz
 
 # Expo
 .expo/

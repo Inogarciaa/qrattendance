@@ -24,8 +24,8 @@ export default function App() {
   const [page, setPage] = useState("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState({
-    name: "Ino Garcia",
-    email: "ino@gmail.com",
+    name: "Demo Admin",
+    email: "admin@example.com",
   });
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [signedOut, setSignedOut] = useState(false);

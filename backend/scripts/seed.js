@@ -9,7 +9,7 @@ const PROGRAMS = [
 ];
 
 const PEOPLE = [
-  { school_id: "ADMIN-0001", full_name: "Ino Garcia", birthdate: "1985-01-15", role: "admin", program_code: null, year_level: null },
+  { school_id: "ADMIN-0001", full_name: "Test Admin", birthdate: "1990-01-01", role: "admin", program_code: null, year_level: null },
   { school_id: "2023-0142", full_name: "Maria Santos", birthdate: "2003-04-12", role: "student", program_code: "BSIT", year_level: 3 },
   { school_id: "2023-0157", full_name: "Jose Ramirez", birthdate: "2003-08-02", role: "student", program_code: "BSIT", year_level: 3 },
   { school_id: "2024-0210", full_name: "Angela Cruz", birthdate: "2004-01-20", role: "student", program_code: "BSBA", year_level: 2 },
