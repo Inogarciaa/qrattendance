@@ -44,6 +44,9 @@ uploads/
 *.backup
 *.sql.gz
 
+# Local development database (created on first run)
+backend/data/
+
 # Expo
 .expo/
 .expo-shared/

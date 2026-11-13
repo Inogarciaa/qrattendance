@@ -1,6 +1,8 @@
 const express = require("express");
 const { admin } = require("../lib/supabase");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { isLocalMode } = require("../lib/mode");
+const localDb = require("../lib/local-db");
 
 const router = express.Router();
 
@@ -10,6 +12,8 @@ const EVENT_FIELDS =
 const LIST_SELECT = `${EVENT_FIELDS}, event_organizers(profile_id), event_audiences(program_id)`;
 
 router.get("/", requireAuth, async (req, res) => {
+  if (isLocalMode) return res.json({ events: localDb.listEvents() });
+
   let query = admin.from("events").select(LIST_SELECT).order("event_date", { ascending: false });
 
   if (req.user.role === "organizer") {
@@ -32,6 +36,16 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 router.get("/:id", requireAuth, async (req, res) => {
+  if (isLocalMode) {
+    const event = localDb.getEvent(req.params.id);
+    if (!event) return res.status(404).json({ error: "Event not found" });
+    return res.json({
+      event: { ...event, event_summaries: [] },
+      tally: { present: 0, late: 0, absent: 0 },
+      enrolled: null,
+    });
+  }
+
   const { data, error } = await admin
     .from("events")
     .select(
@@ -104,6 +118,14 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "end_time must be after start_time" });
   }
 
+  if (isLocalMode) {
+    const event = localDb.createEvent(
+      { ...payload, organizer_ids: body.organizer_ids, program_ids: body.program_ids },
+      req.user.id
+    );
+    return res.status(201).json({ event });
+  }
+
   const { data: event, error } = await admin
     .from("events")
     .insert({ ...payload, created_by: req.user.id })
@@ -124,6 +146,16 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "end_time must be after start_time" });
   }
 
+  if (isLocalMode) {
+    const event = localDb.updateEvent(req.params.id, {
+      ...payload,
+      organizer_ids: body.organizer_ids,
+      program_ids: body.program_ids,
+    });
+    if (!event) return res.status(404).json({ error: "Event not found" });
+    return res.json({ event });
+  }
+
   const { data: event, error } = await admin
     .from("events")
     .update(payload)
@@ -140,17 +172,55 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 });
 
 router.put("/:id/organizers", requireAuth, requireRole("admin"), async (req, res) => {
+  if (isLocalMode) {
+    const event = localDb.updateEvent(req.params.id, {
+      organizer_ids: req.body?.organizer_ids,
+    });
+    if (!event) return res.status(404).json({ error: "Event not found" });
+    return res.json({ ok: true });
+  }
   await replaceOrganizers(req.params.id, req.body?.organizer_ids);
   res.json({ ok: true });
 });
 
 router.put("/:id/audiences", requireAuth, requireRole("admin"), async (req, res) => {
+  if (isLocalMode) {
+    const event = localDb.updateEvent(req.params.id, {
+      program_ids: req.body?.program_ids,
+    });
+    if (!event) return res.status(404).json({ error: "Event not found" });
+    return res.json({ ok: true });
+  }
   await replaceAudiences(req.params.id, req.body?.program_ids);
   res.json({ ok: true });
 });
 
 router.post("/:id/close", requireAuth, requireRole("admin"), async (req, res) => {
   const eventId = req.params.id;
+
+  if (isLocalMode) {
+    const event = localDb.getEvent(eventId);
+    if (!event) return res.status(404).json({ error: "Event not found" });
+
+    const programIds = new Set((event.event_audiences || []).map((row) => row.program_id));
+    const enrolled = localDb
+      .listAccounts("student")
+      .filter((student) => programIds.has(student.program_id)).length;
+
+    localDb.updateEvent(eventId, { status: "completed" });
+    return res.json({
+      summary: {
+        event_id: eventId,
+        enrolled,
+        present: 0,
+        late: 0,
+        absent: enrolled,
+        attendance_rate: 0,
+        generated_at: new Date().toISOString(),
+      },
+    });
+  }
+
   const { data: event, error: eventError } = await admin
     .from("events")
     .select("*")

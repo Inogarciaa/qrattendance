@@ -1,6 +1,6 @@
 # Data Requirements and Model
 
-This is the working data model for AttendX. It combines:
+This is the working data model for LacoQR. It combines:
 
 - the entity list and relationships in the supplied ERD;
 - the requirements in `Dynamic QR Attendance.pdf`;
@@ -55,10 +55,9 @@ events, **Own** = only the user's own row, **Read** = read-only, **—** = no ac
 | `audit_logs` | Full | — | — | — |
 | `app_settings` | Full | Read | — | — |
 
-**Superadmin is new.** The current enum has only `admin`, `organizer`, and
-`student`. Admin-only RLS policies must be extended so superadmin is treated as
-an admin for event/report access, while admin-account management remains
-superadmin-only.
+**Superadmin is implemented.** `supabase/migrations/0003_superadmin.sql` adds the
+enum value and treats superadmin as an admin for event/report access, while
+admin-account management remains superadmin-only.
 
 ---
 

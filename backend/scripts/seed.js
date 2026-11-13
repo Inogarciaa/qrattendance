@@ -1,6 +1,9 @@
 require("dotenv").config();
 const { admin } = require("../src/lib/supabase");
 const { toEmail, buildPassword, toBirthdate } = require("../src/lib/password");
+const { isLocalMode } = require("../src/lib/mode");
+const { seedLocalData } = require("../src/lib/local-db");
+const { staffAccounts } = require("../src/lib/staff-accounts");
 
 const PROGRAMS = [
   { code: "BSIT", name: "BS Information Technology" },
@@ -9,7 +12,7 @@ const PROGRAMS = [
 ];
 
 const PEOPLE = [
-  { school_id: "ADMIN-0001", full_name: "Test Admin", birthdate: "1990-01-01", role: "admin", program_code: null, year_level: null },
+  ...staffAccounts(),
   { school_id: "2023-0142", full_name: "Maria Santos", birthdate: "2003-04-12", role: "student", program_code: "BSIT", year_level: 3 },
   { school_id: "2023-0157", full_name: "Jose Ramirez", birthdate: "2003-08-02", role: "student", program_code: "BSIT", year_level: 3 },
   { school_id: "2024-0210", full_name: "Angela Cruz", birthdate: "2004-01-20", role: "student", program_code: "BSBA", year_level: 2 },
@@ -26,8 +29,8 @@ async function findExisting(email) {
 }
 
 async function ensureUser(person, programByCode) {
-  const email = toEmail(person.school_id);
-  const password = buildPassword(person.school_id, person.birthdate);
+  const email = person.email || toEmail(person.school_id);
+  const password = person.password || buildPassword(person.school_id, person.birthdate);
 
   const { data, error } = await admin.auth.admin.createUser({
     email,
@@ -65,6 +68,19 @@ async function ensureUser(person, programByCode) {
 }
 
 async function main() {
+  if (isLocalMode) {
+    const seeded = seedLocalData();
+    console.log("\nLocal development database ready (backend/data/local-db.json).");
+    console.log("Seeded accounts:");
+    for (const account of seeded.accounts) {
+      console.log(
+        `  ${account.role.padEnd(10)} ${account.email.padEnd(28)} password: ${account.password}`
+      );
+    }
+    console.log("\nDone.");
+    return;
+  }
+
   for (const program of PROGRAMS) {
     await admin.from("programs").upsert(program, { onConflict: "code" });
   }

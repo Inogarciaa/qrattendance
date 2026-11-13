@@ -2,6 +2,8 @@ const express = require("express");
 const { admin } = require("../lib/supabase");
 const { toEmail, buildPassword, toBirthdate } = require("../lib/password");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { isLocalMode } = require("../lib/mode");
+const { listAccounts } = require("../lib/local-db");
 
 const router = express.Router();
 
@@ -78,17 +80,74 @@ async function importUsers(rows, role) {
 }
 
 router.post("/import/students", async (req, res) => {
+  if (isLocalMode) {
+    return res.status(501).json({ error: "Import is not available in local mode" });
+  }
   const results = await importUsers(req.body?.rows, "student");
   res.json(results);
 });
 
 router.post("/import/organizers", async (req, res) => {
+  if (isLocalMode) {
+    return res.status(501).json({ error: "Import is not available in local mode" });
+  }
   const results = await importUsers(req.body?.rows, "organizer");
   res.json(results);
 });
 
+router.get("/organizers", async (req, res) => {
+  if (isLocalMode) {
+    return res.json({
+      organizers: listAccounts("organizer").map((account) => ({
+        id: account.id,
+        school_id: account.school_id,
+        full_name: account.full_name,
+        program: account.program
+          ? { id: account.program.id, code: account.program.code, name: account.program.name }
+          : null,
+      })),
+    });
+  }
+
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, school_id, full_name, program:programs(id, code, name)")
+    .eq("role", "organizer")
+    .eq("is_active", true)
+    .order("full_name");
+  if (error) throw error;
+  res.json({ organizers: data });
+});
+
 router.get("/students", async (req, res) => {
   const { q, program_id } = req.query;
+
+  if (isLocalMode) {
+    let students = listAccounts("student").map((account) => ({
+      id: account.id,
+      school_id: account.school_id,
+      full_name: account.full_name,
+      year_level: null,
+      photo_url: null,
+      is_active: account.is_active,
+      program: account.program
+        ? { id: account.program.id, code: account.program.code, name: account.program.name }
+        : null,
+    }));
+    if (program_id) {
+      students = students.filter((student) => String(student.program?.id) === String(program_id));
+    }
+    if (q) {
+      const needle = String(q).toLowerCase();
+      students = students.filter(
+        (student) =>
+          student.full_name.toLowerCase().includes(needle) ||
+          student.school_id.toLowerCase().includes(needle)
+      );
+    }
+    return res.json({ students });
+  }
+
   let query = admin
     .from("profiles")
     .select("id, school_id, full_name, year_level, photo_url, is_active, program:programs(id, code, name)")
@@ -104,6 +163,10 @@ router.get("/students", async (req, res) => {
 });
 
 router.get("/students/:id/attendance", async (req, res) => {
+  if (isLocalMode) {
+    return res.json({ attendance: [], tally: { present: 0, late: 0, absent: 0 } });
+  }
+
   const { data, error } = await admin
     .from("attendance")
     .select("id, status, method, scanned_at, event:events(id, name, event_date, venue)")

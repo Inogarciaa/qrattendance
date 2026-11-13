@@ -1,10 +1,15 @@
-# AttendX Web Dashboard
+# LacoQR Web Dashboard
 
 React + Vite dashboard for **superadmin** and **admin** users.
 
-The current version is a UI prototype. It uses demo data from
-`src/lib/demo-data.js`; the next phase is to replace each page's data source with
-the Express API.
+Authentication and the Create Event form are connected to the Express API. The
+dashboard, reports, and student search still use demo data from
+`src/lib/demo-data.js` and can be wired to the API next.
+
+## Sign in
+
+The API creates the superadmin and admin accounts from the seed script. Run
+`npm run seed` to print their email addresses and passwords.
 
 ## Run
 
@@ -26,7 +31,7 @@ npm run preview   # preview the production build
 ```text
 src/
 ├── app/
-│   └── App.jsx                 # sidebar, topbar, page switching, logout
+│   └── App.jsx                 # auth session, sidebar, topbar, page switching, logout
 ├── components/
 │   └── ui/                     # reusable presentation components
 │       ├── DataTable.jsx
@@ -35,6 +40,7 @@ src/
 │       ├── PageHeader.jsx
 │       └── StatusBadge.jsx
 ├── features/
+│   ├── auth/LoginPage.jsx      # email + password sign-in
 │   ├── dashboard/DashboardPage.jsx
 │   ├── events/CreateEventPage.jsx
 │   ├── help/HelpPage.jsx
@@ -42,6 +48,7 @@ src/
 │   ├── settings/SettingsPage.jsx
 │   └── students/SearchStudentsPage.jsx
 ├── lib/
+│   ├── api.js                  # fetch wrapper + session storage
 │   ├── demo-data.js            # temporary; remove as pages go live
 │   └── format.js
 ├── styles/app.css
@@ -59,11 +66,11 @@ src/
 
 ## Connecting the API
 
-When wiring a page to the backend:
+`src/lib/api.js` already handles the API base URL, bearer token, and session
+storage. To wire another page:
 
-1. Add an API client (recommended: `src/lib/api.js`) that reads
-   `import.meta.env.VITE_API_URL` and attaches the bearer token.
-2. Replace the demo-data import with a request.
+1. Add a request function to `src/lib/api.js`.
+2. Replace the demo-data import with that request.
 3. Add loading, empty, and error states.
 4. Remove that page's demo data from `src/lib/demo-data.js`.
 
@@ -78,9 +85,7 @@ anon key is safe for client-side use.
 
 ## Planned admin screens
 
-- Login and role guard (admin vs. superadmin).
 - Event list and event detail/edit.
-- Organizer and audience assignment.
 - Full-screen display terminal with a 30-second rotating QR.
 - Live dashboard using realtime updates.
 - Student search connected to `/api/admin/students`.

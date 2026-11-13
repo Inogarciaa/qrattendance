@@ -1,4 +1,4 @@
-# AttendX Database
+# LacoQR Database
 
 PostgreSQL schema for the dynamic QR attendance system, designed for Supabase.
 Nothing is wired up yet — this only defines the database.
@@ -9,24 +9,24 @@ Nothing is wired up yet — this only defines the database.
 | --- | --- |
 | `migrations/0001_schema.sql` | enums, tables, indexes, helper functions |
 | `migrations/0002_rls.sql` | Row Level Security policies + read grants |
+| `migrations/0003_superadmin.sql` | `superadmin` enum value + admin-equivalent policies |
 | `seed.sql` | default programs (BSIT, BSBA, BSED) |
 
-Apply in order (`0001` → `0002` → `seed.sql`) in the Supabase SQL editor, or via the
+Apply in order (`0001` → `0002` → `0003` → `seed.sql`) in the Supabase SQL editor, or via the
 Supabase CLI:
 
 ```bash
 supabase db push
 ```
 
-> **Next migration:** `0003_alignment.sql` is planned but not applied yet. It
-> should add the `superadmin` role, token hashing, year-level audiences,
-> `report_exports`, and `audit_logs`. See `docs/DATA_MODEL.md`.
+> **Next migration:** `0004_alignment.sql` is planned. It should add token hashing,
+> year-level audiences, `report_exports`, and `audit_logs`. See `docs/DATA_MODEL.md`.
 
 ## Enumerated types
 
 | Type | Values |
 | --- | --- |
-| `user_role` | admin, organizer, student (proposed: + superadmin) |
+| `user_role` | admin, superadmin, organizer, student |
 | `scan_mode` | gatekeeper, self_service, dual |
 | `event_status` | draft, scheduled, live, completed, cancelled |
 | `attendance_status` | present, late, absent |
@@ -143,12 +143,14 @@ clients — insert/update/delete run through the service role (the API layer) on
 
 - **student** — own profile, events for their program, own attendance
 - **organizer** — assigned events, student profiles, attendance for assigned events
-- **admin** — full access
+- **admin** — full event/report access
+- **superadmin** — same as admin (account management stays API/service-role only)
 
 ## Helper functions
 
 - `current_role()` — caller's role (security definer)
 - `current_program()` — caller's program id
+- `is_admin()` — true for `admin` and `superadmin`
 
 ## Note on auth
 

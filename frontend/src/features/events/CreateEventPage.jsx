@@ -1,9 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Field from "../../components/ui/Field";
 import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
-import { SCAN_MODES, STUDENTS } from "../../lib/demo-data";
+import { createEvent, fetchOrganizers, fetchPrograms } from "../../lib/api";
 import { formatTime, toMinutes } from "../../lib/format";
+
+const MODES = [
+  {
+    key: "gatekeeper",
+    label: "Gatekeeper Scan Mode",
+    icon: "uc",
+    description:
+      "Organizers scan each student's QR and verify their photo before saving.",
+  },
+  {
+    key: "self_service",
+    label: "Self-Service Scan Mode",
+    icon: "mon",
+    description:
+      "Students scan the event QR shown on a projector or TV. Best for large venues.",
+  },
+  {
+    key: "dual",
+    label: "Dual Mode",
+    icon: "lay",
+    description: "Use both methods at the same time.",
+  },
+];
 
 const BLANK_EVENT = {
   name: "",
@@ -13,23 +36,62 @@ const BLANK_EVENT = {
   start: "",
   end: "",
   grace: "15",
-  mode: SCAN_MODES[0][0],
+  mode: "gatekeeper",
+  programs: [],
   organizers: [],
 };
 
-export default function CreateEventPage() {
+export default function CreateEventPage({ toast }) {
   const [form, setForm] = useState(BLANK_EVENT);
   const [errors, setErrors] = useState({});
-  const [done, setDone] = useState(false);
+  const [created, setCreated] = useState(null);
+  const [programs, setPrograms] = useState([]);
+  const [organizers, setOrganizers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([fetchPrograms(), fetchOrganizers()])
+      .then(([programData, organizerData]) => {
+        if (!active) return;
+        setPrograms(programData.programs || []);
+        setOrganizers(organizerData.organizers || []);
+      })
+      .catch((err) => {
+        if (active) setLoadError(err.message || "Unable to load form options.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const update = (key) => (event) => {
     setForm({ ...form, [key]: event.target.value });
     setErrors({ ...errors, [key]: "" });
   };
 
-  const selfService = form.mode === SCAN_MODES[1][0];
-  const gatekeeper = !selfService;
-  const needsDisplay = form.mode !== SCAN_MODES[0][0];
+  const toggle = (listKey, id) => {
+    const values = form[listKey];
+    setForm({
+      ...form,
+      [listKey]: values.includes(id)
+        ? values.filter((value) => value !== id)
+        : [...values, id],
+    });
+    setErrors({ ...errors, [listKey]: "" });
+  };
+
+  const selfService = form.mode === "self_service";
+  const needsOrganizers = !selfService;
+  const needsDisplay = form.mode !== "gatekeeper";
   const graceMinutes = parseInt(form.grace, 10);
   const lateAt =
     form.start && graceMinutes >= 0
@@ -47,17 +109,7 @@ export default function CreateEventPage() {
     />
   );
 
-  const toggleOrganizer = (name) => {
-    setForm({
-      ...form,
-      organizers: form.organizers.includes(name)
-        ? form.organizers.filter((item) => item !== name)
-        : [...form.organizers, name],
-    });
-    setErrors({ ...errors, organizers: "" });
-  };
-
-  const submit = () => {
+  const submit = async () => {
     const nextErrors = {};
     if (!form.name.trim()) nextErrors.name = "Enter the event name.";
     if (!form.venue.trim()) nextErrors.venue = "Enter the venue.";
@@ -71,28 +123,72 @@ export default function CreateEventPage() {
     if (isNaN(graceMinutes) || graceMinutes < 0 || graceMinutes > 120) {
       nextErrors.grace = "Enter 0 to 120 minutes.";
     }
-    if (gatekeeper && !form.organizers.length) {
+    if (!form.programs.length) {
+      nextErrors.programs = "Select at least one program that will attend.";
+    }
+    if (needsOrganizers && !form.organizers.length) {
       nextErrors.organizers = "Select at least one organizer.";
     }
 
     setErrors(nextErrors);
-    if (!Object.keys(nextErrors).length) setDone(true);
+    setSubmitError("");
+    if (Object.keys(nextErrors).length) return;
+
+    setBusy(true);
+    try {
+      const { event } = await createEvent({
+        name: form.name.trim(),
+        description: form.description.trim(),
+        venue: form.venue.trim(),
+        event_date: form.date,
+        start_time: form.start,
+        end_time: form.end,
+        grace_minutes: graceMinutes,
+        scan_mode: form.mode,
+        program_ids: form.programs,
+        organizer_ids: needsOrganizers ? form.organizers : [],
+      });
+      setCreated(event);
+      toast?.("Event created.");
+    } catch (err) {
+      setSubmitError(err.message || "Unable to create the event.");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  if (done) {
+  const reset = () => {
+    setForm(BLANK_EVENT);
+    setErrors({});
+    setSubmitError("");
+    setCreated(null);
+  };
+
+  if (created) {
     const formattedDate = new Date(form.date + "T00:00").toLocaleDateString(
       "en-PH",
       { weekday: "long", year: "numeric", month: "long", day: "numeric" }
     );
+    const selectedPrograms = programs
+      .filter((program) => form.programs.includes(program.id))
+      .map((program) => program.code)
+      .join(", ");
+    const selectedOrganizers = organizers
+      .filter((organizer) => form.organizers.includes(organizer.id))
+      .map((organizer) => organizer.full_name)
+      .join(", ");
+    const modeLabel = MODES.find((mode) => mode.key === form.mode)?.label;
+
     const summaryRows = [
       ["Event", form.name.trim()],
       ["Venue", form.venue.trim()],
       ["Date", formattedDate],
       ["Time", `${formatTime(toMinutes(form.start))} – ${formatTime(toMinutes(form.end))}`],
       ["Late after", lateAt],
-      ["Scanning method", form.mode],
+      ["Scanning method", modeLabel],
+      ["Students", selectedPrograms],
     ];
-    if (gatekeeper) summaryRows.push(["Organizers", form.organizers.join(", ")]);
+    if (needsOrganizers) summaryRows.push(["Organizers", selectedOrganizers]);
 
     return (
       <div className="card done" aria-live="polite">
@@ -101,7 +197,7 @@ export default function CreateEventPage() {
         </div>
         <h2 style={{ fontSize: 18 }}>Event created</h2>
         <p style={{ margin: "4px 0 0" }}>
-          {form.mode === SCAN_MODES[0][0]
+          {form.mode === "gatekeeper"
             ? "Your organizers can start scanning when the event opens."
             : "Open the display terminal on the venue screen when the event starts."}
         </p>
@@ -113,15 +209,7 @@ export default function CreateEventPage() {
             </div>
           ))}
         </dl>
-        <button
-          type="button"
-          className="btn p"
-          onClick={() => {
-            setForm(BLANK_EVENT);
-            setErrors({});
-            setDone(false);
-          }}
-        >
+        <button type="button" className="btn p" onClick={reset}>
           Create another event
         </button>
       </div>
@@ -132,8 +220,17 @@ export default function CreateEventPage() {
     <>
       <PageHeader
         title="Create Event"
-        description="Set up an event, its late-arrival rule, and how students will check in."
+        description="Set up an event, choose which students attend, and how they will check in."
       />
+
+      {loadError && (
+        <div className="card">
+          <div className="login-error" role="alert">
+            <Icon name="inf" />
+            <span>{loadError}</span>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h2>Event details</h2>
@@ -167,14 +264,42 @@ export default function CreateEventPage() {
       </div>
 
       <div className="card">
+        <h2>Who attends</h2>
+        <p>Pick the programs whose students are expected at this event.</p>
+        {loading ? (
+          <p style={{ margin: 0, color: "var(--mu)" }}>Loading programs…</p>
+        ) : programs.length === 0 ? (
+          <p style={{ margin: 0, color: "var(--mu)" }}>
+            No programs found. Add programs in Supabase first.
+          </p>
+        ) : (
+          <div className="orgs">
+            {programs.map((program) => (
+              <label className="chip" key={program.id}>
+                <input
+                  type="checkbox"
+                  checked={form.programs.includes(program.id)}
+                  onChange={() => toggle("programs", program.id)}
+                />
+                <span>
+                  {program.code} <small>{program.name}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+        {errors.programs && (
+          <span className="err" role="alert">
+            {errors.programs}
+          </span>
+        )}
+      </div>
+
+      <div className="card">
         <h2>Late arrival rule</h2>
         <p>Students who scan after the grace period are recorded as Late.</p>
         <div style={{ maxWidth: 260 }}>
-          <Field
-            id="grace"
-            label="Grace period (minutes)"
-            error={errors.grace}
-          >
+          <Field id="grace" label="Grace period (minutes)" error={errors.grace}>
             {input("grace", "number")}
           </Field>
         </div>
@@ -189,17 +314,17 @@ export default function CreateEventPage() {
         <h2>Scanning method</h2>
         <p>Choose how attendance is captured at this venue.</p>
         <div className="modes" role="radiogroup" aria-label="Scanning method">
-          {SCAN_MODES.map(([mode, icon, description]) => (
-            <label className="mode" key={mode}>
+          {MODES.map(({ key, label, icon, description }) => (
+            <label className="mode" key={key}>
               <input
                 type="radio"
                 name="mode"
-                checked={form.mode === mode}
-                onChange={() => setForm({ ...form, mode })}
+                checked={form.mode === key}
+                onChange={() => setForm({ ...form, mode: key })}
               />
               <span className="box">
                 <Icon name={icon} />
-                <b>{mode}</b>
+                <b>{label}</b>
                 <span>{description}</span>
               </span>
             </label>
@@ -207,26 +332,35 @@ export default function CreateEventPage() {
         </div>
       </div>
 
-      {gatekeeper && (
+      {needsOrganizers && (
         <div className="card">
           <h2>Assign organizers</h2>
           <p>
             Student officers who will act as gatekeepers. Pick at least one.
           </p>
-          <div className="orgs">
-            {STUDENTS.slice(0, 6).map((student) => (
-              <label className="chip" key={student.id}>
-                <input
-                  type="checkbox"
-                  checked={form.organizers.includes(student.name)}
-                  onChange={() => toggleOrganizer(student.name)}
-                />
-                <span>
-                  {student.name} <small>{student.program}</small>
-                </span>
-              </label>
-            ))}
-          </div>
+          {loading ? (
+            <p style={{ margin: 0, color: "var(--mu)" }}>Loading organizers…</p>
+          ) : organizers.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--mu)" }}>
+              No organizer accounts found. Add organizers first.
+            </p>
+          ) : (
+            <div className="orgs">
+              {organizers.map((organizer) => (
+                <label className="chip" key={organizer.id}>
+                  <input
+                    type="checkbox"
+                    checked={form.organizers.includes(organizer.id)}
+                    onChange={() => toggle("organizers", organizer.id)}
+                  />
+                  <span>
+                    {organizer.full_name}{" "}
+                    <small>{organizer.program?.code || "Organizer"}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
           {errors.organizers && (
             <span className="err" role="alert">
               {errors.organizers}
@@ -248,19 +382,26 @@ export default function CreateEventPage() {
         </div>
       )}
 
+      {submitError && (
+        <div className="card">
+          <div className="login-error" role="alert">
+            <Icon name="inf" />
+            <span>{submitError}</span>
+          </div>
+        </div>
+      )}
+
       <div className="acts">
-        <button
-          type="button"
-          className="btn"
-          onClick={() => {
-            setForm(BLANK_EVENT);
-            setErrors({});
-          }}
-        >
+        <button type="button" className="btn" onClick={reset}>
           Cancel
         </button>
-        <button type="button" className="btn p" onClick={submit}>
-          Create event
+        <button
+          type="button"
+          className="btn p"
+          onClick={submit}
+          disabled={busy || loading}
+        >
+          {busy ? "Creating…" : "Create event"}
         </button>
       </div>
     </>

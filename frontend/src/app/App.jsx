@@ -3,9 +3,11 @@ import Icon from "../components/ui/Icon";
 import CreateEventPage from "../features/events/CreateEventPage";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import HelpPage from "../features/help/HelpPage";
+import LoginPage from "../features/auth/LoginPage";
 import ReportsPage from "../features/reports/ReportsPage";
 import SearchStudentsPage from "../features/students/SearchStudentsPage";
 import SettingsPage from "../features/settings/SettingsPage";
+import { clearSession, fetchMe, loadSession } from "../lib/api";
 import { initials } from "../lib/format";
 
 const MAIN_NAV = [
@@ -21,14 +23,12 @@ const GENERAL_NAV = [
 ];
 
 export default function App() {
+  const [session, setSession] = useState(() => loadSession());
+  const [user, setUser] = useState(() => loadSession()?.user ?? null);
+  const [checkingSession, setCheckingSession] = useState(Boolean(loadSession()));
   const [page, setPage] = useState("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [user, setUser] = useState({
-    name: "Demo Admin",
-    email: "admin@example.com",
-  });
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
-  const [signedOut, setSignedOut] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
   useEffect(() => {
@@ -37,9 +37,54 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
+  useEffect(() => {
+    if (!session?.access_token) {
+      setCheckingSession(false);
+      return;
+    }
+
+    let cancelled = false;
+    fetchMe()
+      .then(({ user: profile }) => {
+        if (cancelled) return;
+        setUser(profile);
+        setSession((current) => ({ ...current, user: profile }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearSession();
+        setSession(null);
+        setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingSession(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // Validate the stored token once when the app starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const navigate = (nextPage) => {
     setPage(nextPage);
     setSidebarOpen(false);
+  };
+
+  const handleLogin = (nextSession) => {
+    setSession(nextSession);
+    setUser(nextSession.user);
+    setPage("Dashboard");
+    setCheckingSession(false);
+  };
+
+  const signOut = () => {
+    clearSession();
+    setSession(null);
+    setUser(null);
+    setLogoutDialogOpen(false);
+    setPage("Dashboard");
   };
 
   const renderNavItem = ({ label, icon }) => (
@@ -55,38 +100,31 @@ export default function App() {
     </button>
   );
 
-  if (signedOut) {
-    return (
-      <div className="app out">
-        <div className="card done">
-          <h2 style={{ fontSize: 18 }}>You're signed out</h2>
-          <p style={{ margin: "4px 0 16px" }}>
-            See you next time, {user.name.split(" ")[0]}.
-          </p>
-          <button
-            type="button"
-            className="btn p"
-            onClick={() => {
-              setSignedOut(false);
-              setPage("Dashboard");
-            }}
-          >
-            Sign in again
-          </button>
+  if (!session || !user) {
+    if (checkingSession) {
+      return (
+        <div className="app out">
+          <div className="card done">
+            <h2 style={{ fontSize: 18 }}>Loading your session…</h2>
+            <p style={{ margin: "4px 0 0" }}>Connecting to LacoQR.</p>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    return <LoginPage onLogin={handleLogin} />;
   }
 
   const pages = {
     Dashboard: <DashboardPage />,
     Reports: <ReportsPage toast={setToastMessage} />,
-    "Create Event": <CreateEventPage />,
+    "Create Event": <CreateEventPage toast={setToastMessage} />,
     "Search Students": <SearchStudentsPage />,
     Settings: (
       <SettingsPage
-        user={user}
-        setUser={setUser}
+        user={{ name: user.full_name, email: user.email }}
+        setUser={(next) =>
+          setUser({ ...user, full_name: next.name, email: next.email })
+        }
         toast={setToastMessage}
       />
     ),
@@ -101,7 +139,7 @@ export default function App() {
             <span className="logo">
               <Icon name="grid" />
             </span>
-            AttendX
+            LacoQR
           </div>
           <div className="grp">Menu</div>
           {MAIN_NAV.map(renderNavItem)}
@@ -143,15 +181,16 @@ export default function App() {
             <Icon name="cht" />
           </button>
           <div className="me">
-            <span className="av">{initials(user.name)}</span>
+            <span className="av">{initials(user.full_name)}</span>
             <div>
-              <b>{user.name}</b>
+              <b>{user.full_name}</b>
               <small>{user.email}</small>
             </div>
+            <span className="role-pill">{user.role}</span>
           </div>
         </header>
         <main className="content">
-          <div className="inner">{pages[page]}</div>
+          <div className="inner">{pages[page] ?? pages.Dashboard}</div>
         </main>
       </div>
 
@@ -174,14 +213,7 @@ export default function App() {
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className="btn p"
-                onClick={() => {
-                  setLogoutDialogOpen(false);
-                  setSignedOut(true);
-                }}
-              >
+              <button type="button" className="btn p" onClick={signOut}>
                 Log out
               </button>
             </div>

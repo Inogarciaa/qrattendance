@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "LacoQR",
+    "slug": "lacoqr",
+    "scheme": "lacoqr",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lacoqr.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "LacoQR uses your camera to scan event attendance QR codes."
+      }
+    },
+    "android": {
+      "package": "com.lacoqr.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f1c3f",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "LacoQR uses your camera to scan event attendance QR codes.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

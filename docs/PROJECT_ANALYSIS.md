@@ -12,7 +12,7 @@ them into an implementation plan.
 
 ## 1. What the system is
 
-AttendX is an event attendance platform for La Consolacion College Bacolod. It
+LacoQR is an event attendance platform for La Consolacion College Bacolod. It
 replaces paper sign-in sheets and static QR codes with **rotating QR tokens** and
 an optional **human verification step**.
 
