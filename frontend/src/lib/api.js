@@ -84,6 +84,59 @@ export function createEvent(payload) {
   return request("/events", { method: "POST", body: payload });
 }
 
+/** Partial update; only the fields present are written. */
+export function updateEvent(id, payload) {
+  return request(`/events/${id}`, { method: "PUT", body: payload });
+}
+
 export function fetchEvents() {
   return request("/events");
+}
+
+export function fetchEvent(id) {
+  return request(`/events/${id}`);
+}
+
+export function fetchLiveDashboard() {
+  return request("/dashboard/live");
+}
+
+export function searchStudents({ q = "", programId = "", status = "" } = {}) {
+  const params = new URLSearchParams();
+  if (String(q).trim()) params.set("q", String(q).trim());
+  if (programId) params.set("program_id", programId);
+  if (status) params.set("status", status);
+  const query = params.toString();
+  return request(`/admin/students${query ? `?${query}` : ""}`);
+}
+
+/** Self sign-ups (students and organizers) waiting for an admin decision. */
+export function fetchApprovals() {
+  return request("/admin/approvals");
+}
+
+/**
+ * Approves a pending account, optionally correcting its role or department.
+ * Rejecting deletes the account so the same school ID can be used again.
+ */
+export function setAccountApproval(id, { approved, role, programId } = {}) {
+  const body = { approved };
+  if (role) body.role = role;
+  if (programId !== undefined) body.program_id = programId;
+  return request(`/admin/accounts/${id}/approval`, { method: "PATCH", body });
+}
+
+export function fetchStudentAttendance(id) {
+  return request(`/admin/students/${id}/attendance`);
+}
+
+export function fetchReports(filters = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, value);
+    }
+  }
+  const query = params.toString();
+  return request(`/reports${query ? `?${query}` : ""}`);
 }

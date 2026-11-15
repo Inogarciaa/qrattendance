@@ -4,6 +4,7 @@ const { toEmail, buildPassword, toBirthdate } = require("../lib/password");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { isLocalMode } = require("../lib/mode");
 const { listAccounts } = require("../lib/local-db");
+const { hasApprovalColumn } = require("../lib/schema");
 
 const router = express.Router();
 
@@ -58,6 +59,7 @@ async function importUsers(rows, role) {
         id: created.user.id,
         school_id: String(school_id),
         full_name,
+        email,
         role,
         program_id: programId,
         year_level: row.year_level ?? null,
@@ -120,13 +122,14 @@ router.get("/organizers", async (req, res) => {
 });
 
 router.get("/students", async (req, res) => {
-  const { q, program_id } = req.query;
+  const { q, program_id, status } = req.query;
 
   if (isLocalMode) {
     let students = listAccounts("student").map((account) => ({
       id: account.id,
       school_id: account.school_id,
       full_name: account.full_name,
+      email: account.email,
       year_level: null,
       photo_url: null,
       is_active: account.is_active,
@@ -142,24 +145,144 @@ router.get("/students", async (req, res) => {
       students = students.filter(
         (student) =>
           student.full_name.toLowerCase().includes(needle) ||
-          student.school_id.toLowerCase().includes(needle)
+          student.school_id.toLowerCase().includes(needle) ||
+          String(student.email || "").toLowerCase().includes(needle)
       );
     }
-    return res.json({ students });
+    return res.json({ students, approvals_enabled: false });
   }
+
+  const withApproval = await hasApprovalColumn();
+  const columns =
+    "id, school_id, full_name, email, year_level, photo_url, is_active, program:programs(id, code, name)";
 
   let query = admin
     .from("profiles")
-    .select("id, school_id, full_name, year_level, photo_url, is_active, program:programs(id, code, name)")
+    .select(withApproval ? `${columns}, approved_at` : columns)
     .eq("role", "student")
     .order("full_name");
 
+  if (withApproval && status === "pending") query = query.is("approved_at", null);
+  if (withApproval && status === "active") query = query.not("approved_at", "is", null);
+
   if (program_id) query = query.eq("program_id", program_id);
-  if (q) query = query.or(`full_name.ilike.%${q}%,school_id.ilike.%${q}%`);
+  if (q) {
+    const term = String(q).replace(/[%,()]/g, "");
+    query = query.or(
+      `full_name.ilike.%${term}%,school_id.ilike.%${term}%,email.ilike.%${term}%`
+    );
+  }
 
   const { data, error } = await query;
   if (error) throw error;
-  res.json({ students: data });
+  res.json({ students: data, approvals_enabled: withApproval });
+});
+
+/**
+ * The approval queue: every self-signed-up account, student or organizer,
+ * that an admin has not accepted yet.
+ */
+router.get("/approvals", async (req, res) => {
+  if (isLocalMode) {
+    return res.json({ approvals: [], approvals_enabled: false });
+  }
+
+  const withApproval = await hasApprovalColumn();
+  if (!withApproval) {
+    return res.json({ approvals: [], approvals_enabled: false });
+  }
+
+  const { data, error } = await admin
+    .from("profiles")
+    .select(
+      "id, school_id, full_name, email, role, year_level, created_at, program:programs(id, code, name)"
+    )
+    .in("role", ["student", "organizer"])
+    .is("approved_at", null)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  res.json({ approvals: data || [], approvals_enabled: true });
+});
+
+const APPROVABLE_ROLES = ["student", "organizer"];
+
+/**
+ * Approves a self-signed-up student or organizer, or rejects (deletes) one that
+ * is still pending. The admin can correct the role and department in the same
+ * call, because people do pick the wrong button.
+ */
+router.patch("/accounts/:id/approval", async (req, res) => {
+  if (isLocalMode) {
+    return res.status(501).json({ error: "Approval is not available in local mode" });
+  }
+  if (!(await hasApprovalColumn())) {
+    return res.status(503).json({
+      error: "Approvals need migration 0005_signup_approval.sql",
+      code: "migration_required",
+    });
+  }
+
+  const approved = Boolean(req.body?.approved);
+  const { data: profile, error } = await admin
+    .from("profiles")
+    .select("id, role, approved_at")
+    .eq("id", req.params.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!profile) return res.status(404).json({ error: "Account not found" });
+  if (!APPROVABLE_ROLES.includes(profile.role)) {
+    return res.status(400).json({ error: "Staff accounts are not approved here" });
+  }
+
+  if (!approved) {
+    if (profile.approved_at) {
+      return res
+        .status(409)
+        .json({ error: "This account is already approved. Disable it instead." });
+    }
+    // Deleting the auth user also removes the profile through the FK cascade.
+    const { error: deleteError } = await admin.auth.admin.deleteUser(profile.id);
+    if (deleteError) throw deleteError;
+    return res.json({ deleted: true });
+  }
+
+  const changes = { is_active: true, approved_at: new Date().toISOString() };
+
+  if (req.body?.role !== undefined) {
+    const role = String(req.body.role).trim().toLowerCase();
+    if (!APPROVABLE_ROLES.includes(role)) {
+      return res.status(400).json({ error: "role must be student or organizer" });
+    }
+    changes.role = role;
+  }
+
+  if (req.body?.program_id !== undefined) {
+    const programId = req.body.program_id === null ? null : Number(req.body.program_id);
+    if (programId !== null && !Number.isInteger(programId)) {
+      return res.status(400).json({ error: "program_id must be a number or null" });
+    }
+    if (programId !== null) {
+      const { data: program, error: programError } = await admin
+        .from("programs")
+        .select("id")
+        .eq("id", programId)
+        .maybeSingle();
+      if (programError) throw programError;
+      if (!program) return res.status(400).json({ error: "Unknown program/department" });
+    }
+    changes.program_id = programId;
+  }
+
+  const { data: updated, error: updateError } = await admin
+    .from("profiles")
+    .update(changes)
+    .eq("id", profile.id)
+    .select("id, school_id, full_name, email, role, is_active, approved_at")
+    .single();
+  if (updateError) throw updateError;
+
+  res.json({ account: updated });
 });
 
 router.get("/students/:id/attendance", async (req, res) => {

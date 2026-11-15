@@ -1,50 +1,88 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { getEvents, getMyAttendance } from "../api/client";
+import { useApp } from "../context/AppContext";
+import { colors, fonts, radius, spacing } from "../theme/tokens";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
 import { Card } from "./Card";
 import { ScreenHeader } from "./ScreenHeader";
-import { useApp } from "../context/AppContext";
-import { profileSettings } from "../mock/data";
-import { colors, fonts, radius, spacing } from "../theme/tokens";
+
+const PROFILE_SETTINGS = [
+  { id: "notifications", label: "Notifications", icon: "notifications-outline", detail: "On" },
+  { id: "security", label: "Security", icon: "shield-checkmark-outline", detail: "School ID login" },
+  { id: "help", label: "Help & Support", icon: "help-circle-outline", detail: "" },
+  { id: "about", label: "About LacoQR", icon: "information-circle-outline", detail: "v1.0.0" },
+];
 
 export function ProfileScreen() {
   const { user, signOut } = useApp();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [stats, setStats] = useState(null);
 
   const isStudent = user?.role === "student";
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      (async () => {
+        try {
+          if (isStudent) {
+            const records = await getMyAttendance();
+            const present = records.filter((record) => record.status === "present").length;
+            const late = records.filter((record) => record.status === "late").length;
+            const onTime = records.length ? Math.round((present / records.length) * 100) : 0;
+            if (active) setStats({ first: records.length, second: onTime, third: late });
+          } else {
+            const events = await getEvents();
+            const scans = events.reduce((sum, event) => sum + event.present + event.late, 0);
+            const enrolled = events.reduce((sum, event) => sum + (event.enrolled || 0), 0);
+            const turnout = enrolled ? Math.round((scans / enrolled) * 100) : 0;
+            if (active) setStats({ first: events.length, second: scans, third: turnout });
+          }
+        } catch {
+          if (active) setStats(null);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [isStudent])
+  );
+
   const handleLogout = () => {
-    Alert.alert("Log out of LacoQR?", "You will return to the role selection screen.", [
+    Alert.alert("Log out?", "You will return to the sign-in screen.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Log out",
         style: "destructive",
-        onPress: () => {
-          signOut();
+        onPress: async () => {
+          await signOut();
           router.replace("/");
         },
       },
     ]);
   };
 
-  const handleSetting = (item) => {
-    Alert.alert(item.label, "This is a UI prototype — settings are not wired up yet.");
+  const handleSetting = () => {
+    Alert.alert("Coming soon", "This setting is not available yet.");
   };
+
+  const statValue = (key, suffix = "") =>
+    stats ? `${stats[key]}${suffix}` : "—";
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader
-        title="Profile"
-        subtitle={isStudent ? "Student account" : "Organizer account"}
-        tone="navy"
-      >
+      <ScreenHeader tone="navy">
         <View style={styles.hero}>
-          <Avatar name={user?.name} size={62} tone="dark" />
+          <Avatar name={user?.name} size={64} tone="dark" />
           <View style={styles.heroText}>
             <Text style={styles.name}>{user?.name}</Text>
             <View style={styles.rolePill}>
@@ -67,62 +105,53 @@ export function ProfileScreen() {
         <Card style={styles.statsCard}>
           {isStudent ? (
             <>
-              <StatBlock value="12" label="Events attended" />
+              <StatBlock value={statValue("first")} label="Attended" />
               <View style={styles.divider} />
-              <StatBlock value="92%" label="On-time rate" />
+              <StatBlock value={statValue("second", "%")} label="On time" />
               <View style={styles.divider} />
-              <StatBlock value="1" label="Late record" />
+              <StatBlock value={statValue("third")} label="Late" />
             </>
           ) : (
             <>
-              <StatBlock value="8" label="Events managed" />
+              <StatBlock value={statValue("first")} label="Events" />
               <View style={styles.divider} />
-              <StatBlock value="526" label="Scans today" />
+              <StatBlock value={statValue("second")} label="Scans" />
               <View style={styles.divider} />
-              <StatBlock value="99.2%" label="Accuracy" />
+              <StatBlock value={statValue("third", "%")} label="Turnout" />
             </>
           )}
         </Card>
 
-        <Text style={styles.sectionLabel}>ACCOUNT DETAILS</Text>
+        <Text style={styles.sectionLabel}>Account</Text>
         <Card padded={false} style={styles.listCard}>
           <InfoRow icon="id-card-outline" label="School ID" value={user?.schoolId} />
-          <InfoRow icon="book-outline" label="Program" value={user?.program} />
-          {isStudent ? (
-            <InfoRow icon="layers-outline" label="Year & Section" value={`Year ${user?.yearLevel} · ${user?.section}`} />
+          <InfoRow icon="book-outline" label="Program" value={user?.program || "—"} />
+          {isStudent && user?.yearLevel ? (
+            <InfoRow icon="layers-outline" label="Year level" value={`Year ${user.yearLevel}`} />
           ) : (
-            <InfoRow icon="briefcase-outline" label="Position" value={user?.position} />
+            <InfoRow icon="shield-outline" label="Role" value={isStudent ? "Student" : "Organizer"} />
           )}
-          <InfoRow icon="mail-outline" label="Email" value={user?.email} last />
+          <InfoRow icon="mail-outline" label="Email" value={user?.email || "—"} last />
         </Card>
 
-        <Text style={styles.sectionLabel}>PREFERENCES</Text>
+        <Text style={styles.sectionLabel}>Preferences</Text>
         <Card padded={false} style={styles.listCard}>
-          {profileSettings.map((item, index) => (
+          {PROFILE_SETTINGS.map((item, index) => (
             <SettingRow
               key={item.id}
               item={item}
-              last={index === profileSettings.length - 1}
-              onPress={() => handleSetting(item)}
+              last={index === PROFILE_SETTINGS.length - 1}
+              onPress={handleSetting}
             />
           ))}
         </Card>
 
-        <View style={styles.demoNote}>
-          <Ionicons name="flask-outline" size={16} color={colors.brand} />
-          <Text style={styles.demoText}>
-            Prototype build · all data is mocked. No real attendance is recorded.
-          </Text>
-        </View>
-
         <Button
           label="Log out"
-          icon="log-out-outline"
           variant="danger"
           onPress={handleLogout}
           style={styles.logout}
         />
-        <Text style={styles.version}>LacoQR Mobile · v1.0.0</Text>
       </ScrollView>
     </View>
   );
@@ -141,7 +170,7 @@ function InfoRow({ icon, label, value, last }) {
   return (
     <View style={[styles.row, !last && styles.rowBorder]}>
       <View style={styles.rowIcon}>
-        <Ionicons name={icon} size={17} color={colors.brand} />
+        <Ionicons name={icon} size={16} color={colors.brand} />
       </View>
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowValue} numberOfLines={1}>
@@ -153,14 +182,21 @@ function InfoRow({ icon, label, value, last }) {
 
 function SettingRow({ item, last, onPress }) {
   return (
-    <View style={[styles.row, !last && styles.rowBorder]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        !last && styles.rowBorder,
+        pressed && { backgroundColor: colors.bg },
+      ]}
+    >
       <View style={styles.rowIcon}>
-        <Ionicons name={item.icon} size={17} color={colors.brand} />
+        <Ionicons name={item.icon} size={16} color={colors.brand} />
       </View>
       <Text style={styles.rowLabel}>{item.label}</Text>
       {item.detail ? <Text style={styles.rowDetail}>{item.detail}</Text> : null}
       <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-    </View>
+    </Pressable>
   );
 }
 
@@ -173,13 +209,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    marginTop: 20,
+    marginTop: 8,
   },
   heroText: {
     flex: 1,
   },
   name: {
-    fontFamily: fonts.extrabold,
+    fontFamily: fonts.bold,
     fontSize: 20,
     letterSpacing: -0.4,
     color: colors.white,
@@ -189,23 +225,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: radius.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginTop: 5,
   },
   roleText: {
-    fontFamily: fonts.semibold,
-    fontSize: 10,
-    letterSpacing: 0.4,
+    fontFamily: fonts.medium,
+    fontSize: 10.5,
     color: colors.white,
-    textTransform: "uppercase",
   },
   schoolId: {
     fontFamily: fonts.medium,
     fontSize: 12,
-    color: "rgba(255,255,255,0.62)",
+    color: "rgba(255,255,255,0.55)",
     marginTop: 5,
   },
   content: {
@@ -216,22 +250,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 16,
-    marginTop: -38,
+    paddingTop: 18,
+    paddingBottom: 16,
+    marginTop: -26,
   },
   statBlock: {
     flex: 1,
     alignItems: "center",
   },
   statValue: {
-    fontFamily: fonts.extrabold,
+    fontFamily: fonts.bold,
     fontSize: 19,
     letterSpacing: -0.4,
     color: colors.text,
   },
   statLabel: {
     fontFamily: fonts.medium,
-    fontSize: 10.5,
+    fontSize: 11,
     color: colors.muted,
     marginTop: 2,
     textAlign: "center",
@@ -243,12 +278,11 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontFamily: fonts.semibold,
-    fontSize: 10,
-    letterSpacing: 1.1,
-    color: colors.muted,
+    fontSize: 13,
+    color: colors.text,
     marginTop: 24,
     marginBottom: 8,
-    marginLeft: 4,
+    marginLeft: 2,
   },
   listCard: {
     overflow: "hidden",
@@ -265,8 +299,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowIcon: {
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
     borderRadius: 9,
     backgroundColor: colors.tint,
     alignItems: "center",
@@ -290,30 +324,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
   },
-  demoNote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: colors.tint,
-    borderRadius: radius.md,
-    padding: 12,
-    marginTop: 22,
-  },
-  demoText: {
-    flex: 1,
-    fontFamily: fonts.medium,
-    fontSize: 11.5,
-    lineHeight: 17,
-    color: colors.brandDark,
-  },
   logout: {
-    marginTop: 20,
-  },
-  version: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: colors.muted,
-    textAlign: "center",
-    marginTop: 16,
+    marginTop: 24,
   },
 });

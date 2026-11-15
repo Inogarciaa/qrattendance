@@ -1,23 +1,23 @@
 export const colors = {
-  navy: "#0f1c3f",
-  navy2: "#162350",
+  navy: "#0f172a",
+  navy2: "#1e293b",
   brand: "#2563eb",
   brandDark: "#1d4ed8",
   brandLight: "#3b82f6",
-  green: "#10b981",
+  green: "#059669",
   greenSoft: "#ecfdf5",
-  amber: "#f59e0b",
+  amber: "#d97706",
   amberSoft: "#fffbeb",
-  red: "#ef4444",
+  red: "#dc2626",
   redSoft: "#fef2f2",
-  bg: "#f0f4f8",
+  bg: "#f6f7f9",
   surface: "#ffffff",
-  text: "#0f172a",
-  muted: "#64748b",
-  border: "#e2e8f0",
-  tint: "#eff6ff",
+  text: "#111827",
+  muted: "#6b7280",
+  border: "#e9edf2",
+  tint: "#eff4ff",
   white: "#ffffff",
-  overlay: "rgba(15, 28, 63, 0.62)",
+  overlay: "rgba(15, 23, 42, 0.55)",
 };
 
 export const statusColors = {
@@ -26,7 +26,7 @@ export const statusColors = {
   absent: { fg: colors.red, bg: colors.redSoft, label: "Absent" },
   live: { fg: colors.green, bg: colors.greenSoft, label: "Live" },
   upcoming: { fg: colors.brand, bg: colors.tint, label: "Upcoming" },
-  closed: { fg: colors.muted, bg: "#f1f5f9", label: "Closed" },
+  closed: { fg: colors.muted, bg: "#f3f4f6", label: "Closed" },
 };
 
 export const spacing = {
@@ -40,26 +40,26 @@ export const spacing = {
 };
 
 export const radius = {
-  sm: 10,
+  sm: 12,
   md: 14,
-  lg: 18,
-  xl: 24,
+  lg: 20,
+  xl: 26,
   pill: 999,
 };
 
 export const shadow = {
   card: {
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 18,
+    elevation: 2,
   },
   floating: {
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
     elevation: 8,
   },
 };
@@ -73,11 +73,11 @@ export const fonts = {
 };
 
 export const type = {
-  h1: { fontFamily: fonts.extrabold, fontSize: 26, letterSpacing: -0.6, color: colors.text },
-  h2: { fontFamily: fonts.bold, fontSize: 20, letterSpacing: -0.4, color: colors.text },
-  h3: { fontFamily: fonts.bold, fontSize: 16, letterSpacing: -0.2, color: colors.text },
+  h1: { fontFamily: fonts.bold, fontSize: 25, letterSpacing: -0.7, color: colors.text },
+  h2: { fontFamily: fonts.bold, fontSize: 19, letterSpacing: -0.4, color: colors.text },
+  h3: { fontFamily: fonts.semibold, fontSize: 15.5, letterSpacing: -0.2, color: colors.text },
   body: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
   bodyStrong: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
   small: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
-  tiny: { fontFamily: fonts.semibold, fontSize: 10, letterSpacing: 0.8, color: colors.muted },
+  tiny: { fontFamily: fonts.medium, fontSize: 11, color: colors.muted },
 };

@@ -4,6 +4,7 @@ import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
 import { createEvent, fetchOrganizers, fetchPrograms } from "../../lib/api";
 import { formatTime, toMinutes } from "../../lib/format";
+import LocationPicker from "./LocationPicker";
 
 const MODES = [
   {
@@ -39,6 +40,9 @@ const BLANK_EVENT = {
   mode: "gatekeeper",
   programs: [],
   organizers: [],
+  latitude: "",
+  longitude: "",
+  radius: "100",
 };
 
 export default function CreateEventPage({ toast }) {
@@ -51,6 +55,8 @@ export default function CreateEventPage({ toast }) {
   const [loadError, setLoadError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locationNote, setLocationNote] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -98,6 +104,16 @@ export default function CreateEventPage({ toast }) {
       ? formatTime(toMinutes(form.start) + graceMinutes)
       : "";
 
+  const pinLat = Number(form.latitude);
+  const pinLon = Number(form.longitude);
+  const pinValid =
+    form.latitude.trim() !== "" &&
+    form.longitude.trim() !== "" &&
+    Number.isFinite(pinLat) &&
+    Number.isFinite(pinLon) &&
+    Math.abs(pinLat) <= 90 &&
+    Math.abs(pinLon) <= 180;
+
   const input = (key, type = "text", placeholder) => (
     <input
       id={key}
@@ -109,8 +125,56 @@ export default function CreateEventPage({ toast }) {
     />
   );
 
-  const submit = async () => {
-    const nextErrors = {};
+  /**
+   * Fills the coordinates from the admin's own browser. This is the simplest
+   * way to drop a pin: stand at the venue (or its door) and press the button.
+   */
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      setSubmitError("This browser cannot read your location. Enter the coordinates manually.");
+      return;
+    }
+
+    setLocating(true);
+    setSubmitError("");
+    setLocationNote("");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        setForm((prev) => ({
+          ...prev,
+          latitude: latitude.toFixed(6),
+          longitude: longitude.toFixed(6),
+        }));
+        setErrors((prev) => ({ ...prev, latitude: "", longitude: "" }));
+        setLocationNote(
+          Number.isFinite(accuracy)
+            ? `Captured ±${Math.round(accuracy)} m. Check the pin before creating the event.`
+            : "Location captured. Check the pin before creating the event."
+        );
+        setLocating(false);
+      },
+      (error) => {
+        setLocating(false);
+        setSubmitError(
+          error?.code === error?.PERMISSION_DENIED
+            ? "Location permission was denied. Enter the coordinates manually."
+            : "Could not read your location. Enter the coordinates manually."
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  /** Removes the fence entirely so this event has no location check. */
+  const clearPin = () => {
+    setForm((prev) => ({ ...prev, latitude: "", longitude: "" }));
+    setErrors((prev) => ({ ...prev, latitude: "", longitude: "" }));
+    setLocationNote("");
+  };
+
+  const submit = async () => {    const nextErrors = {};
     if (!form.name.trim()) nextErrors.name = "Enter the event name.";
     if (!form.venue.trim()) nextErrors.venue = "Enter the venue.";
     if (!form.date) nextErrors.date = "Choose the event date.";
@@ -123,6 +187,27 @@ export default function CreateEventPage({ toast }) {
     if (isNaN(graceMinutes) || graceMinutes < 0 || graceMinutes > 120) {
       nextErrors.grace = "Enter 0 to 120 minutes.";
     }
+
+    const hasLat = form.latitude.trim() !== "";
+    const hasLon = form.longitude.trim() !== "";
+    if (hasLat !== hasLon) {
+      nextErrors.latitude = "Enter both coordinates, or leave both empty.";
+      nextErrors.longitude = "Enter both coordinates, or leave both empty.";
+    } else if (hasLat) {
+      const latitude = Number(form.latitude);
+      const longitude = Number(form.longitude);
+      const radius = Number(form.radius);
+      if (!Number.isFinite(latitude) || Math.abs(latitude) > 90) {
+        nextErrors.latitude = "Latitude must be between -90 and 90.";
+      }
+      if (!Number.isFinite(longitude) || Math.abs(longitude) > 180) {
+        nextErrors.longitude = "Longitude must be between -180 and 180.";
+      }
+      if (form.radius.trim() === "" || !Number.isFinite(radius) || radius < 25 || radius > 1000) {
+        nextErrors.radius = "Enter 25 to 1000 metres.";
+      }
+    }
+
     if (!form.programs.length) {
       nextErrors.programs = "Select at least one program that will attend.";
     }
@@ -147,6 +232,13 @@ export default function CreateEventPage({ toast }) {
         scan_mode: form.mode,
         program_ids: form.programs,
         organizer_ids: needsOrganizers ? form.organizers : [],
+        ...(hasLat
+          ? {
+              latitude: Number(form.latitude),
+              longitude: Number(form.longitude),
+              geofence_radius_m: Math.round(Number(form.radius)),
+            }
+          : {}),
       });
       setCreated(event);
       toast?.("Event created.");
@@ -161,6 +253,7 @@ export default function CreateEventPage({ toast }) {
     setForm(BLANK_EVENT);
     setErrors({});
     setSubmitError("");
+    setLocationNote("");
     setCreated(null);
   };
 
@@ -189,6 +282,9 @@ export default function CreateEventPage({ toast }) {
       ["Students", selectedPrograms],
     ];
     if (needsOrganizers) summaryRows.push(["Organizers", selectedOrganizers]);
+    if (form.latitude.trim() && form.longitude.trim()) {
+      summaryRows.push(["Venue fence", `${form.radius} m radius`]);
+    }
 
     return (
       <div className="card done" aria-live="polite">
@@ -260,6 +356,74 @@ export default function CreateEventPage({ toast }) {
           <Field id="end" label="End time" required error={errors.end}>
             {input("end", "time")}
           </Field>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Venue location</h2>
+        <p>
+          Optional. When set, a student who checks in by scanning the event QR must
+          be within this radius of the venue. Organizers scanning student codes are
+          never blocked by location.
+        </p>
+
+        <LocationPicker
+          latitude={pinValid ? pinLat : null}
+          longitude={pinValid ? pinLon : null}
+          radius={Number(form.radius) || 100}
+          onChange={({ latitude, longitude }) => {
+            setForm((prev) => ({
+              ...prev,
+              latitude: latitude.toFixed(6),
+              longitude: longitude.toFixed(6),
+            }));
+            setErrors((prev) => ({ ...prev, latitude: "", longitude: "" }));
+            setLocationNote("");
+          }}
+        />
+
+        <div className="location-actions">
+          <button type="button" className="btn" onClick={useMyLocation} disabled={locating}>
+            <Icon name="pin" />
+            {locating ? "Getting your location…" : "Use my current location"}
+          </button>
+          {pinValid && (
+            <button type="button" className="btn" onClick={clearPin}>
+              Clear pin
+            </button>
+          )}
+        </div>
+
+        <div className="g" style={{ marginTop: 16 }}>
+          <Field id="latitude" label="Latitude" error={errors.latitude}>
+            {input("latitude", "number", "e.g. 8.485700")}
+          </Field>
+          <Field id="longitude" label="Longitude" error={errors.longitude}>
+            {input("longitude", "number", "e.g. 124.639300")}
+          </Field>
+          <Field id="radius" label="Radius (metres)" error={errors.radius}>
+            {input("radius", "number", "100")}
+          </Field>
+        </div>
+
+        {pinValid && (
+          <div className="hint">
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${pinLat},${pinLon}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Check the pin in Google Maps
+            </a>
+            {locationNote ? ` — ${locationNote}` : ""}
+          </div>
+        )}
+        {!pinValid && locationNote ? <div className="hint">{locationNote}</div> : null}
+        <div className="hint">
+          Drag the pin for fine tuning, or type the coordinates. Map tiles come from
+          OpenStreetMap, so the map needs an internet connection. Leave both
+          coordinates empty to skip the location check. Accuracy indoors is often
+          30–50 m, so keep the radius comfortable — 100 m suits most campus venues.
         </div>
       </div>
 

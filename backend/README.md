@@ -30,12 +30,45 @@ mapping. See `docs/FOLDER_STRUCTURE.md` for the project-wide conventions.
 `superadmin` is added by `supabase/migrations/0003_superadmin.sql` and passes every
 `admin` guard.
 
-## Local development mode
+## Data mode (Supabase or local file DB)
 
-When `SUPABASE_URL` is missing or still the placeholder
-`https://your-project.supabase.co`, the API automatically uses a file-backed local
-database at `backend/data/local-db.json` (gitignored). It seeds programs, staff,
-organizers, and students on first use. `npm run seed` prints the accounts.
+`DATA_MODE` in `backend/.env` picks the data source explicitly:
+
+| `DATA_MODE` | Behaviour |
+| --- | --- |
+| `supabase` | always use Supabase; the API refuses to boot if the URL/keys are missing |
+| `local` | always use `backend/data/local-db.json` |
+| empty / unset | auto-detect: Supabase if real credentials are present, otherwise local |
+
+The old heuristic (treating `https://your-project.supabase.co` as "local") still
+applies as a safety net in auto mode. At boot the API logs the resolved source:
+
+```text
+[mode] data source: Supabase (supabase)
+```
+
+### Local development mode
+
+When the resolved mode is `local`, the API uses a file-backed database at
+`backend/data/local-db.json` (gitignored). It seeds programs, staff, organizers,
+and students on first use. `npm run seed` prints the accounts.
+
+## Health check
+
+`GET /api/health` answers "is this thing actually connected?":
+
+```json
+{ "status": "ok", "mode": "supabase", "database": "ok",
+  "supabase_url": "https://<ref>.supabase.co", "time": "..." }
+```
+
+- `database: "ok"` — a real query (`select id from programs limit 1`) succeeded.
+- `database: "schema-missing-or-unreachable"` — credentials work but the tables
+  are missing, i.e. the migrations in `supabase/` were never applied. Responds 503.
+- `database: "local-db.json"` — running in local mode.
+
+API responses are sent with `Cache-Control: no-store` and Express ETags are
+disabled, so polling clients always see fresh attendance instead of a 304.
 
 ## Setup
 
@@ -44,8 +77,19 @@ organizers, and students on first use. `npm run seed` prints the accounts.
    - `supabase/migrations/0001_schema.sql`
    - `supabase/migrations/0002_rls.sql`
    - `supabase/migrations/0003_superadmin.sql`
+   - `supabase/migrations/0004_profiles_email.sql`
+   - `supabase/migrations/0005_signup_approval.sql`
+   - `supabase/migrations/0006_geofence.sql`
    - `supabase/seed.sql`
-3. In `backend/`, copy `.env.example` to `.env` and fill in the project URL and keys.
+
+   Or paste the combined `supabase/apply_all.sql` once — it contains all six
+   migrations plus the seed programs.
+
+   Restart the API after applying `0005`/`0006`: PostgREST caches the column list,
+   so the new columns are invisible until the connection is recreated. (The API
+   also degrades gracefully meanwhile — see *Migrations are optional* below.)
+3. In `backend/`, copy `.env.example` to `.env`, fill in the project URL and keys,
+   and set `DATA_MODE=supabase`.
 4. Install and seed:
 
 ```bash
@@ -53,6 +97,8 @@ npm install
 npm run seed     # creates sample admin, organizers, students and one live event
 npm run dev      # http://localhost:3000
 ```
+
+Then confirm with `curl http://localhost:3000/api/health`.
 
 ## Accounts
 
@@ -67,6 +113,12 @@ Example: school ID `2023-0142`, birthdate `2003-04-12` → password `20230142200
 
 An identifier is mapped to a synthetic Auth email `digits(school_id)@lccb.local`
 (domain configurable via `AUTH_EMAIL_DOMAIN`).
+
+Students and organizers may also sign up with Google (`/auth/onboarding`); staff
+accounts stay email + password. Either way, a forgotten password is reset with a
+6-digit code emailed from the Supabase project's custom SMTP server (Gmail + app
+password). Codes come from `/auth/forgot-password` and are exchanged at
+`/auth/reset-password`; nothing is stored on our side.
 
 `npm run seed` prints the generated logins.
 
@@ -86,6 +138,36 @@ An identifier is mapped to a synthetic Auth email `digits(school_id)@lccb.local`
 - Validation rejects anything past `expires_at` (0% acceptance for expired tokens).
 - Every accept/reject is written to `scan_attempts` for security auditing.
 
+## Geofencing (migration 0006)
+
+Self check-in has **two** gates: the rotating token *and* the venue fence. Gatekeeper
+scanning keeps its single gate — the organizer looking at the student — and is never
+blocked by location.
+
+- `events.latitude` / `events.longitude` are optional. Without them there is no fence,
+  so every event created before the migration behaves exactly as it did.
+  `events.geofence_radius_m` defaults to 100 m and is validated to 25–1000 m.
+- The admin places the pin on an OpenStreetMap/Leaflet map (or types the coordinates)
+  in **Create Event**, and can move it later with **Change location** on the
+  dashboard. Both use `PUT /events/:id`.
+- `POST /scan/self-checkin` accepts `{ latitude, longitude, accuracy, mocked }`:
+  - a trustworthy fix inside the radius → saved with `location_verified = true`, plus
+    `distance_m` and `accuracy_m`;
+  - no fix, `accuracy > 50 m`, or `mocked: true` → **accepted but flagged**
+    (`location_verified = false`, `reason = location_unverified`). Locking a student
+    out over a bad fix inside a concrete building is the worse failure;
+  - a trustworthy fix beyond the radius → `403 { code: "out_of_area", distance_m,
+    radius_m }`, logged in `scan_attempts`.
+- Gatekeeper rows and `absent` rows written when an event closes leave the location
+  columns null — the app does not record an organizer's position.
+- `GET /reports/export` adds `Location Verified`, `Distance (m)` and `Accuracy (m)`.
+- `npm run geo:check` runs the Haversine and boundary assertions in
+  `scripts/check-geo.js`; the project has no test runner, so it is a plain Node script.
+
+If `0006_geofence.sql` has not been applied, the API logs a warning, selects events
+without the geo fields and skips the fence. Creating or editing an event with
+coordinates answers `503 { code: "migration_required" }`.
+
 ## Endpoints
 
 Base path: `/api`. All routes except `/auth/*` require `Authorization: Bearer <access_token>`.
@@ -96,7 +178,48 @@ Base path: `/api`. All routes except `/auth/*` require `Authorization: Bearer <a
 | --- | --- | --- | --- |
 | POST | `/auth/login` | public | body `{ email, password }` (staff) or `{ school_id, birthdate }` (mobile) → session tokens |
 | POST | `/auth/refresh` | public | body `{ refresh_token }` (Supabase mode only) |
-| GET | `/auth/me` | any | current profile |
+| GET | `/auth/me` | any session | `{ user, status, email }` where `status` is `ready`, `onboarding`, `pending`, or `disabled` |
+| POST | `/auth/onboarding` | Google session without a profile | body `{ role, school_id, full_name, birthdate, program_code, year_level? }` → creates a **pending** profile. `role` is `student` or `organizer` (staff roles are refused); organizers skip `year_level` and store their department in `program_id` |
+| POST | `/auth/forgot-password` | public | body `{ email }` → emails a 6-digit recovery code (always answers `{ ok: true }`) |
+| POST | `/auth/reset-password` | public | body `{ email, code, password }` → verifies the code, sets the password, returns a ready session |
+
+Login answers with `403` and a `code` when the account cannot be used yet:
+`profile_missing`, `pending_approval`, or `account_disabled`. The mobile app uses
+those codes to route to onboarding or the waiting screen.
+
+## Sign-up and approval
+
+Anyone with a Google account can install the app and sign up. The login screen has
+two sign-up buttons, **Sign up as student** and **Sign up as organizer**, so the
+form knows which fields to ask for before the OAuth handshake. The flow is:
+
+1. The app runs the Supabase Google OAuth handshake (PKCE) and gets a session.
+2. `GET /auth/me` reports `status: "onboarding"` because no profile exists yet.
+3. `POST /auth/onboarding` creates a profile with `is_active = false` and
+   `approved_at = NULL`. Students send a year level; organizers send only their
+   department (stored in `program_id`). `GET /auth/me` now reports
+   `status: "pending"`.
+4. An admin approves from the web dashboard's **Approvals** page
+   (`PATCH /admin/accounts/:id/approval` with `{ approved: true, role?, program_id? }`),
+   which sets `is_active = true` and stamps `approved_at`. The optional role and
+   department correct a wrong button press in the same call.
+5. The next `GET /auth/me` reports `status: "ready"` and the app opens.
+
+Rejecting (`{ approved: false }`) deletes the Supabase auth user; the profile goes
+with it through the FK cascade, so the school ID can be used again.
+
+The organizer department is profile metadata only: it never selects a geofence and
+never assigns events. Fences are chosen per event by the admin.
+
+`GET /admin/approvals` returns the queue (`{ approvals, approvals_enabled }`) for
+both roles, oldest first.
+
+Pending accounts do not affect attendance numbers: `audienceSize()` only counts
+`is_active = true` profiles.
+
+If `0005_signup_approval.sql` has not been applied, the API logs a warning, keeps
+serving existing accounts as approved, and answers approval requests with
+`503 { code: "migration_required" }`.
 
 ### Tokens
 
@@ -111,16 +234,16 @@ Base path: `/api`. All routes except `/auth/*` require `Authorization: Bearer <a
 | --- | --- | --- | --- |
 | POST | `/scan/preview` | admin, organizer | body `{ event_id, token }` → student profile + photo, predicted status |
 | POST | `/scan/confirm` | admin, organizer | body `{ event_id, token }` → commits gatekeeper attendance |
-| POST | `/scan/self-checkin` | student | body `{ event_id, token }` → self-service attendance |
+| POST | `/scan/self-checkin` | student | body `{ event_id, token, latitude?, longitude?, accuracy?, mocked? }` → self-service attendance (fence applied when the event has coordinates) |
 
 ### Events
 
 | Method | Path | Role | Description |
 | --- | --- | --- | --- |
 | GET | `/events` | any | scoped list by role |
-| GET | `/events/:id` | any | detail + tally + summary |
-| POST | `/events` | admin | create (accepts `organizer_ids`, `program_ids`) |
-| PUT | `/events/:id` | admin | update |
+| GET | `/events/:id` | any | detail + tally + enrolled audience count |
+| POST | `/events` | admin | create (accepts `organizer_ids`, `program_ids`, `latitude`, `longitude`, `geofence_radius_m`) |
+| PUT | `/events/:id` | admin | update (same fields; send `latitude`/`longitude` as `null` to clear the fence) |
 | PUT | `/events/:id/organizers` | admin | replace organizers |
 | PUT | `/events/:id/audiences` | admin | replace audience programs |
 | POST | `/events/:id/close` | admin | aggregate, mark absents, write summary |
@@ -132,14 +255,16 @@ Base path: `/api`. All routes except `/auth/*` require `Authorization: Bearer <a
 | POST | `/admin/import/students` | admin | body `{ rows: [...] }` |
 | POST | `/admin/import/organizers` | admin | body `{ rows: [...] }` |
 | GET | `/admin/organizers` | admin | list active organizers for event assignment |
-| GET | `/admin/students` | admin | search students (`q`, `program_id`) |
+| GET | `/admin/students` | admin | search students by name, school ID, or email (`q`, `program_id`, `status=pending\|active`) |
+| GET | `/admin/approvals` | admin | self sign-ups (students and organizers) with `approved_at IS NULL` → `{ approvals, approvals_enabled }` |
+| PATCH | `/admin/accounts/:id/approval` | admin | body `{ approved, role?, program_id? }` — approve (optionally correcting role/department) or delete a pending signup |
 | GET | `/admin/students/:id/attendance` | admin | attendance history |
 
 Import row shape:
 
 ```json
 { "school_id": "2024-0500", "full_name": "Juan Dela Cruz", "birthdate": "2004-05-01",
-  "program_code": "BSIT", "year_level": 2, "photo_url": "https://..." }
+  "program_code": "SBIT", "year_level": 2, "photo_url": "https://..." }
 ```
 
 ### Reports & Dashboard

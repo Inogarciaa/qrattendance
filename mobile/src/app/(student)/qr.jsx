@@ -1,27 +1,62 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Brightness from "expo-brightness";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle } from "react-native-svg";
 
+import {
+  buildStudentQrPayload,
+  getEvents,
+  issueStudentToken,
+} from "../../api/client";
 import { Avatar } from "../../components/Avatar";
+import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
-import { StatusBadge } from "../../components/StatusBadge";
+import { CountdownRing } from "../../components/CountdownRing";
 import { useApp } from "../../context/AppContext";
-import { useTokenRotation } from "../../hooks/useTokenRotation";
+import { useQrToken } from "../../hooks/useQrToken";
+import { formatClock } from "../../lib/format";
 import { colors, fonts, radius, spacing } from "../../theme/tokens";
 
 export default function StudentQrScreen() {
   const { user } = useApp();
   const insets = useSafeAreaInsets();
-  const { token, secondsLeft, progress, refresh } = useTokenRotation();
+  const [liveEvents, setLiveEvents] = useState([]);
+  const [eventsError, setEventsError] = useState("");
+
+  const { token, secondsLeft, expired, windowSeconds, progress, loading, error, generate } =
+    useQrToken({ issue: issueStudentToken });
   const previousBrightness = useRef(null);
+  const hasCode = Boolean(token);
+
+  // A fresh code every time the student opens this tab.
+  useFocusEffect(
+    useCallback(() => {
+      generate();
+
+      let active = true;
+      getEvents()
+        .then((events) => {
+          if (active) {
+            setLiveEvents(events.filter((event) => event.status === "live"));
+            setEventsError("");
+          }
+        })
+        .catch((err) => {
+          if (active) setEventsError(err?.message || "Could not load events.");
+        });
+
+      return () => {
+        active = false;
+      };
+    }, [generate])
+  );
 
   useFocusEffect(
     useCallback(() => {
+      if (!hasCode) return undefined;
       let mounted = true;
 
       const boost = async () => {
@@ -53,22 +88,23 @@ export default function StudentQrScreen() {
         };
         restore();
       };
-    }, []),
+    }, [hasCode])
   );
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.hero, { paddingTop: insets.top + 12 }]}>
-        <View style={styles.heroRow}>
-          <View style={styles.heroText}>
-            <Text style={styles.eyebrow}>STUDENT ATTENDANCE PASS</Text>
-            <Text style={styles.name}>{user?.name}</Text>
-            <Text style={styles.meta}>
-              {user?.schoolId} · {user?.programCode} · Year {user?.yearLevel}
-            </Text>
-          </View>
-          <Avatar name={user?.name} size={48} tone="dark" />
+      <View style={[styles.hero, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.heroText}>
+          <Text style={styles.name} numberOfLines={1}>
+            {user?.name}
+          </Text>
+          <Text style={styles.meta} numberOfLines={1}>
+            {user?.schoolId}
+            {user?.programCode ? ` · ${user.programCode}` : ""}
+            {user?.yearLevel ? ` · Year ${user.yearLevel}` : ""}
+          </Text>
         </View>
+        <Avatar name={user?.name} size={44} tone="dark" />
       </View>
 
       <ScrollView
@@ -76,124 +112,84 @@ export default function StudentQrScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Card style={styles.qrCard}>
-          <View style={styles.cardTop}>
-            <View>
-              <Text style={styles.cardTitle}>Your check-in code</Text>
-              <Text style={styles.cardSubtitle}>Show this to the organizer</Text>
-            </View>
-            <StatusBadge status="live" label="Active" />
-          </View>
+          {hasCode ? (
+            <>
+              <View style={styles.qrWrap}>
+                <QRCode
+                  value={buildStudentQrPayload(token)}
+                  size={212}
+                  color={colors.navy}
+                  backgroundColor={colors.white}
+                  quietZone={6}
+                />
+              </View>
 
-          <View style={styles.qrWrap}>
-            <QRCode
-              value={token}
-              size={216}
-              color={colors.navy}
-              backgroundColor={colors.white}
-              quietZone={6}
-            />
-          </View>
-
-          <View style={styles.timerRow}>
-            <CountdownRing progress={progress} seconds={secondsLeft} />
-            <View style={styles.timerText}>
-              <Text style={styles.timerTitle}>
-                {secondsLeft <= 5 ? "Refreshing code…" : `Refreshes in ${secondsLeft}s`}
+              <View style={styles.timerRow}>
+                <CountdownRing progress={progress} seconds={secondsLeft} />
+                <Text style={styles.timerTitle}>
+                  {secondsLeft <= 5 ? "Refreshing code…" : `New code in ${secondsLeft}s`}
+                </Text>
+                <Pressable
+                  onPress={generate}
+                  hitSlop={10}
+                  disabled={loading}
+                  accessibilityLabel="Generate a new QR code"
+                  style={({ pressed }) => [styles.refresh, pressed && { opacity: 0.6 }]}
+                >
+                  <Ionicons name="refresh" size={18} color={colors.brand} />
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <View style={styles.generator}>
+              <View style={styles.generatorFrame}>
+                <Ionicons name="qr-code-outline" size={52} color={colors.brand} />
+              </View>
+              <Text style={styles.generatorText}>
+                {error
+                  ? error
+                  : expired
+                    ? "Code expired."
+                    : `Codes are valid for ${windowSeconds} seconds.`}
               </Text>
-              <Text style={styles.timerSubtitle}>
-                Rotates automatically to prevent screenshots
-              </Text>
+              <Button
+                label={loading ? "Generating…" : expired ? "Generate new QR" : "Generate QR"}
+                onPress={generate}
+                loading={loading}
+                style={styles.generatorButton}
+              />
             </View>
-            <Pressable
-              onPress={refresh}
-              hitSlop={10}
-              accessibilityLabel="Refresh QR code"
-              style={({ pressed }) => [styles.refresh, pressed && { opacity: 0.6 }]}
-            >
-              <Ionicons name="refresh" size={18} color={colors.brand} />
-            </Pressable>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.infoRow}>
-            <Ionicons name="time-outline" size={15} color={colors.muted} />
-            <Text style={styles.infoText}>Valid for 30 seconds</Text>
-            <View style={styles.infoDot} />
-            <Ionicons name="shield-checkmark-outline" size={15} color={colors.muted} />
-            <Text style={styles.infoText}>Single use</Text>
-          </View>
+          )}
         </Card>
 
-        <View style={styles.tip}>
-          <View style={styles.tipIcon}>
-            <Ionicons name="bulb-outline" size={18} color={colors.brand} />
-          </View>
-          <Text style={styles.tipText}>
-            Turn your screen toward the scanner at the entrance. Keep the app
-            open — screenshots and shared codes will be rejected.
-          </Text>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Live now</Text>
+          <Text style={styles.sectionCount}>{liveEvents.length}</Text>
         </View>
 
-        <View style={styles.eventRow}>
-          <Text style={styles.sectionLabel}>TODAY&apos;S LIVE EVENTS</Text>
-          <Text style={styles.sectionCount}>2</Text>
-        </View>
-        <Card style={styles.liveEvent} padded={false}>
-          <View style={styles.liveAccent} />
-          <View style={styles.liveBody}>
-            <Text style={styles.liveTitle}>University General Assembly 2026</Text>
-            <Text style={styles.liveMeta}>LCCB Gymnasium · until 11:00 AM</Text>
-          </View>
-          <StatusBadge status="live" label="Live" />
-        </Card>
-        <Card style={styles.liveEvent} padded={false}>
-          <View style={styles.liveAccent} />
-          <View style={styles.liveBody}>
-            <Text style={styles.liveTitle}>BSIT Capstone Defense Briefing</Text>
-            <Text style={styles.liveMeta}>AVR 2, IT Building · until 4:00 PM</Text>
-          </View>
-          <StatusBadge status="live" label="Live" />
-        </Card>
+        {liveEvents.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Ionicons name="calendar-clear-outline" size={20} color={colors.muted} />
+            <Text style={styles.emptyText}>
+              {eventsError || "No events are open for scanning right now."}
+            </Text>
+          </Card>
+        ) : (
+          liveEvents.map((event) => (
+            <Card key={event.id} style={styles.liveEvent} padded={false}>
+              <View style={styles.liveAccent} />
+              <View style={styles.liveBody}>
+                <Text style={styles.liveTitle} numberOfLines={1}>
+                  {event.title}
+                </Text>
+                <Text style={styles.liveMeta} numberOfLines={1}>
+                  {event.venue} · until {formatClock(event.endTime)}
+                </Text>
+              </View>
+            </Card>
+          ))
+        )}
       </ScrollView>
-    </View>
-  );
-}
-
-function CountdownRing({ progress, seconds }) {
-  const size = 52;
-  const stroke = 4;
-  const radiusValue = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radiusValue;
-  const clamped = Math.max(0, Math.min(1, progress));
-
-  return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size} height={size}>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radiusValue}
-          stroke={colors.border}
-          strokeWidth={stroke}
-          fill="none"
-        />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radiusValue}
-          stroke={seconds <= 5 ? colors.amber : colors.brand}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={circumference * (1 - clamped)}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
-      <View style={styles.ringCenter}>
-        <Text style={styles.ringText}>{seconds}</Text>
-      </View>
     </View>
   );
 }
@@ -204,35 +200,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   hero: {
-    backgroundColor: colors.navy,
-    paddingHorizontal: spacing.xl,
-    paddingBottom: 34,
-  },
-  heroRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+    backgroundColor: colors.navy,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 32,
   },
   heroText: {
     flex: 1,
   },
-  eyebrow: {
-    fontFamily: fonts.semibold,
-    fontSize: 9.5,
-    letterSpacing: 1.3,
-    color: "rgba(255,255,255,0.5)",
-  },
   name: {
-    fontFamily: fonts.extrabold,
-    fontSize: 23,
+    fontFamily: fonts.bold,
+    fontSize: 22,
     letterSpacing: -0.6,
     color: colors.white,
-    marginTop: 4,
   },
   meta: {
     fontFamily: fonts.medium,
     fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
+    color: "rgba(255,255,255,0.55)",
     marginTop: 3,
   },
   content: {
@@ -240,164 +227,121 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   qrCard: {
-    marginTop: -22,
-    padding: 18,
-  },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  cardTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 15.5,
-    letterSpacing: -0.2,
-    color: colors.text,
-  },
-  cardSubtitle: {
-    fontFamily: fonts.medium,
-    fontSize: 11.5,
-    color: colors.muted,
-    marginTop: 2,
+    marginTop: -20,
+    padding: 20,
+    alignItems: "center",
   },
   qrWrap: {
-    alignSelf: "center",
     padding: 14,
-    marginTop: 18,
     borderRadius: radius.lg,
     backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  generator: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    paddingVertical: 8,
+  },
+  generatorFrame: {
+    width: 212,
+    height: 212,
+    borderRadius: radius.lg,
+    backgroundColor: colors.tint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  generatorText: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: colors.muted,
+    textAlign: "center",
+    marginTop: 16,
+    paddingHorizontal: 10,
+  },
+  generatorButton: {
+    alignSelf: "stretch",
+    marginTop: 16,
   },
   timerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     marginTop: 18,
-  },
-  timerText: {
-    flex: 1,
+    alignSelf: "stretch",
   },
   timerTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 13.5,
-    color: colors.text,
-  },
-  timerSubtitle: {
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    color: colors.muted,
-    marginTop: 1,
-  },
-  refresh: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: colors.tint,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ringCenter: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ringText: {
-    fontFamily: fonts.bold,
+    flex: 1,
+    fontFamily: fonts.medium,
     fontSize: 13,
     color: colors.text,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 14,
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  infoText: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: colors.muted,
-  },
-  infoDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginHorizontal: 3,
-  },
-  tip: {
-    flexDirection: "row",
-    gap: 10,
+  refresh: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: colors.tint,
-    borderRadius: radius.md,
-    padding: 13,
-    marginTop: 14,
-  },
-  tipIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
   },
-  tipText: {
-    flex: 1,
-    fontFamily: fonts.regular,
-    fontSize: 11.5,
-    lineHeight: 17,
-    color: colors.brandDark,
-  },
-  eventRow: {
+  sectionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 24,
-    marginBottom: 8,
+    marginTop: 26,
+    marginBottom: 10,
+    paddingHorizontal: 2,
   },
-  sectionLabel: {
+  sectionTitle: {
     fontFamily: fonts.semibold,
-    fontSize: 10,
-    letterSpacing: 1.1,
-    color: colors.muted,
+    fontSize: 14,
+    color: colors.text,
   },
   sectionCount: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: colors.brand,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  emptyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 18,
+  },
+  emptyText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.muted,
   },
   liveEvent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    padding: 13,
+    gap: 12,
+    paddingVertical: 14,
+    paddingRight: 14,
     paddingLeft: 0,
-    marginBottom: 8,
+    marginBottom: 10,
     overflow: "hidden",
   },
   liveAccent: {
-    width: 4,
+    width: 3,
     alignSelf: "stretch",
     backgroundColor: colors.green,
-    borderTopRightRadius: 4,
-    borderBottomRightRadius: 4,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
   },
   liveBody: {
     flex: 1,
   },
   liveTitle: {
     fontFamily: fonts.semibold,
-    fontSize: 12.5,
+    fontSize: 13.5,
     color: colors.text,
   },
   liveMeta: {
     fontFamily: fonts.medium,
-    fontSize: 10.5,
+    fontSize: 11.5,
     color: colors.muted,
     marginTop: 2,
   },

@@ -11,6 +11,8 @@ const {
   logAttempt,
 } = require("../services/attendance");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { evaluateGeofence, parseFix } = require("../lib/geo");
+const { hasGeofenceColumns } = require("../lib/schema");
 
 const router = express.Router();
 
@@ -138,24 +140,60 @@ router.post("/self-checkin", requireAuth, requireRole("student"), async (req, re
     return res.status(409).json({ error: "Already checked in", existing });
   }
 
+  // Second gate: the phone has to be at the venue. Only runs once migration
+  // 0006 is applied, so a fresh install keeps working without it.
+  let fence = { applied: false, allowed: true, verified: null, reason: null, distance_m: null, accuracy_m: null, radius_m: null, mocked: false };
+  if (await hasGeofenceColumns()) {
+    fence = evaluateGeofence(event, parseFix(req.body || {}));
+
+    if (!fence.allowed) {
+      await logAttempt({ event_id, student_id: req.user.id, method: "self_service", result: "rejected", reason: fence.reason, token });
+      return res.status(403).json({
+        error: `You are about ${Math.round(fence.distance_m)} m from the venue (limit ${fence.radius_m} m)`,
+        code: fence.reason,
+        distance_m: fence.distance_m,
+        radius_m: fence.radius_m,
+      });
+    }
+  }
+
   const status = computeStatus(event);
-  const { data: record, error } = await admin
-    .from("attendance")
-    .insert({
-      event_id,
-      student_id: req.user.id,
-      status,
-      method: "self_service",
-      scanned_by: null,
-      token_id: check.row.id,
-    })
-    .select()
-    .single();
+  const record = {
+    event_id,
+    student_id: req.user.id,
+    status,
+    method: "self_service",
+    scanned_by: null,
+    token_id: check.row.id,
+  };
+  if (fence.applied) {
+    record.distance_m = fence.distance_m;
+    record.accuracy_m = fence.accuracy_m;
+    record.location_verified = fence.verified;
+    record.location_mocked = fence.mocked;
+  }
+
+  const { data: attendance, error } = await admin.from("attendance").insert(record).select().single();
   if (error) throw error;
 
-  await logAttempt({ event_id, student_id: req.user.id, method: "self_service", result: "accepted", token });
+  await logAttempt({
+    event_id,
+    student_id: req.user.id,
+    method: "self_service",
+    result: "accepted",
+    reason: fence.reason,
+    token,
+  });
 
-  res.status(201).json({ attendance: record });
+  res.status(201).json({
+    attendance,
+    location: {
+      applied: fence.applied,
+      verified: fence.verified,
+      distance_m: fence.distance_m,
+      radius_m: fence.radius_m,
+    },
+  });
 });
 
 module.exports = router;

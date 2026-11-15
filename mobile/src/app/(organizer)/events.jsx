@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -11,10 +12,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { getEvents } from "../../api/client";
 import { Card } from "../../components/Card";
-import { DotStat } from "../../components/Stat";
 import { EmptyState } from "../../components/EmptyState";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { DotStat } from "../../components/Stat";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useApp } from "../../context/AppContext";
 import { colors, fonts, radius, spacing } from "../../theme/tokens";
@@ -27,25 +29,60 @@ const FILTERS = [
 ];
 
 export default function OrganizerEventsScreen() {
-  const { user, events } = useApp();
+  const { user } = useApp();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [filter, setFilter] = useState("all");
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const data = await getEvents();
+      setEvents(data);
+      setError("");
+    } catch (err) {
+      setError(err?.message || "Could not load your events.");
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const data = await getEvents();
+          if (active) {
+            setEvents(data);
+            setError("");
+          }
+        } catch (err) {
+          if (active) setError(err?.message || "Could not load your events.");
+        } finally {
+          if (active) setLoading(false);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
 
   const filtered = useMemo(
     () => (filter === "all" ? events : events.filter((event) => event.status === filter)),
-    [events, filter],
+    [events, filter]
   );
 
   const liveCount = events.filter((event) => event.status === "live").length;
-  const scansToday = events
-    .filter((event) => event.status !== "upcoming")
-    .reduce((sum, event) => sum + event.present + event.late, 0);
+  const checkedIn = events.reduce((sum, event) => sum + event.present + event.late, 0);
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 700);
+    await load();
+    setRefreshing(false);
   };
 
   const openEvent = (event) => {
@@ -55,23 +92,15 @@ export default function OrganizerEventsScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader
-        title="Assigned Events"
-        subtitle={`${user?.name} · ${user?.position}`}
-        right={
-          <View style={styles.headerIcon}>
-            <Ionicons name="notifications-outline" size={18} color={colors.white} />
-          </View>
-        }
-      >
+      <ScreenHeader title="Events" subtitle={user?.program || user?.schoolId}>
         <View style={styles.headerStats}>
           <View style={styles.headerStat}>
             <Text style={styles.headerStatValue}>{liveCount}</Text>
-            <Text style={styles.headerStatLabel}>Live now</Text>
+            <Text style={styles.headerStatLabel}>Live</Text>
           </View>
           <View style={styles.headerDivider} />
           <View style={styles.headerStat}>
-            <Text style={styles.headerStatValue}>{scansToday}</Text>
+            <Text style={styles.headerStatValue}>{checkedIn}</Text>
             <Text style={styles.headerStatLabel}>Checked in</Text>
           </View>
           <View style={styles.headerDivider} />
@@ -97,35 +126,53 @@ export default function OrganizerEventsScreen() {
         })}
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.list,
-          { paddingBottom: insets.bottom + 28 },
-          filtered.length === 0 && styles.listEmpty,
-        ]}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />
-        }
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <EmptyState
-            icon="calendar-clear-outline"
-            title="No events here"
-            message="Nothing matches this filter right now. Try another tab."
-          />
-        }
-        renderItem={({ item }) => <EventCard event={item} onPress={() => openEvent(item)} />}
-      />
+      {loading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.brand} />
+        </View>
+      ) : error && events.length === 0 ? (
+        <View style={styles.loading}>
+          <Text style={styles.errorText} accessibilityRole="alert">
+            {error}
+          </Text>
+          <Pressable onPress={onRefresh} style={styles.retry} accessibilityRole="button">
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: insets.bottom + 28 },
+            filtered.length === 0 && styles.listEmpty,
+          ]}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />
+          }
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <EmptyState
+              icon="calendar-clear-outline"
+              title="No events here"
+              message={
+                filter === "all"
+                  ? "You have not been assigned to any event yet."
+                  : "Nothing matches this filter."
+              }
+            />
+          }
+          renderItem={({ item }) => <EventCard event={item} onPress={() => openEvent(item)} />}
+        />
+      )}
     </View>
   );
 }
 
 function EventCard({ event, onPress }) {
   const live = event.status === "live";
-  const closed = event.status === "closed";
-  const total = event.capacity || 1;
+  const total = event.enrolled || 1;
   const progress = Math.min(100, Math.round(((event.present + event.late) / total) * 100));
 
   return (
@@ -147,7 +194,7 @@ function EventCard({ event, onPress }) {
         <View style={styles.metaRow}>
           <Ionicons name="location-outline" size={13} color={colors.muted} />
           <Text style={styles.metaText} numberOfLines={1}>
-            {event.venue}
+            {event.venue || "—"}
           </Text>
         </View>
         <View style={styles.metaRow}>
@@ -161,26 +208,24 @@ function EventCard({ event, onPress }) {
           <DotStat value={event.present} label="present" color={colors.green} />
           <DotStat value={event.late} label="late" color={colors.amber} />
           <DotStat value={event.absent} label="absent" color={colors.red} />
-          <Text style={styles.capacity}>of {event.capacity}</Text>
+          <Text style={styles.percent}>{progress}%</Text>
         </View>
 
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: live ? colors.green : colors.brand }]} />
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${progress}%`, backgroundColor: live ? colors.green : colors.brand },
+            ]}
+          />
         </View>
 
-        <View style={styles.cardFooter}>
-          <Text style={styles.organizer}>{event.organizer}</Text>
-          {live ? (
-            <View style={styles.scanCta}>
-              <Ionicons name="scan-outline" size={13} color={colors.brand} />
-              <Text style={styles.scanCtaText}>Open scanner</Text>
-            </View>
-          ) : (
-            <Text style={styles.closedHint}>
-              {closed ? "Attendance closed" : "Not started"}
-            </Text>
-          )}
-        </View>
+        {live ? (
+          <View style={styles.scanCta}>
+            <Ionicons name="scan-outline" size={14} color={colors.brand} />
+            <Text style={styles.scanCtaText}>Open scanner</Text>
+          </View>
+        ) : null}
       </Card>
     </Pressable>
   );
@@ -191,22 +236,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  headerIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   headerStats: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 20,
-    backgroundColor: "rgba(255,255,255,0.07)",
+    marginTop: 18,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
     paddingVertical: 10,
   },
   headerStat: {
@@ -214,21 +249,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerStatValue: {
-    fontFamily: fonts.extrabold,
-    fontSize: 17,
+    fontFamily: fonts.bold,
+    fontSize: 18,
     letterSpacing: -0.3,
     color: colors.white,
   },
   headerStatLabel: {
     fontFamily: fonts.medium,
-    fontSize: 9.5,
-    color: "rgba(255,255,255,0.55)",
+    fontSize: 10,
+    color: "rgba(255,255,255,0.5)",
     marginTop: 1,
   },
   headerDivider: {
     width: 1,
     height: 24,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   filters: {
     flexDirection: "row",
@@ -245,16 +280,41 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   chipActive: {
-    backgroundColor: colors.brand,
-    borderColor: colors.brand,
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
   },
   chipText: {
-    fontFamily: fonts.semibold,
-    fontSize: 11.5,
+    fontFamily: fonts.medium,
+    fontSize: 12,
     color: colors.muted,
   },
   chipTextActive: {
     color: colors.white,
+  },
+  loading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  errorText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.red,
+    textAlign: "center",
+  },
+  retry: {
+    marginTop: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+    backgroundColor: colors.tint,
+  },
+  retryText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12.5,
+    color: colors.brand,
   },
   list: {
     padding: spacing.xl,
@@ -278,16 +338,16 @@ const styles = StyleSheet.create({
   },
   date: {
     fontFamily: fonts.medium,
-    fontSize: 11,
+    fontSize: 11.5,
     color: colors.muted,
   },
   cardTitle: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.semibold,
     fontSize: 15,
     lineHeight: 20,
     letterSpacing: -0.2,
     color: colors.text,
-    marginTop: 9,
+    marginTop: 10,
   },
   metaRow: {
     flexDirection: "row",
@@ -311,10 +371,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  capacity: {
+  percent: {
     marginLeft: "auto",
-    fontFamily: fonts.medium,
-    fontSize: 10.5,
+    fontFamily: fonts.semibold,
+    fontSize: 11,
     color: colors.muted,
   },
   progressTrack: {
@@ -328,32 +388,16 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 3,
   },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 11,
-    gap: 10,
-  },
-  organizer: {
-    flex: 1,
-    fontFamily: fonts.medium,
-    fontSize: 10.5,
-    color: colors.muted,
-  },
   scanCta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
+    marginTop: 14,
   },
   scanCtaText: {
+    flex: 1,
     fontFamily: fonts.semibold,
-    fontSize: 11,
+    fontSize: 12,
     color: colors.brand,
-  },
-  closedHint: {
-    fontFamily: fonts.medium,
-    fontSize: 10.5,
-    color: colors.muted,
   },
 });

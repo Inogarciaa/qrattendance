@@ -1,20 +1,17 @@
 const { admin } = require("../lib/supabase");
+const { arrivalStatus, isLiveWindow } = require("../lib/clock");
 
-function eventStart(event) {
-  return new Date(`${event.event_date}T${event.start_time}`);
-}
-
-function eventEnd(event) {
-  return new Date(`${event.event_date}T${event.end_time}`);
-}
-
+/**
+ * All event windows are evaluated in Asia/Manila. Building Dates from
+ * `${event_date}T${start_time}` would use the server's local timezone and
+ * misclassify scans when the API runs on a UTC host.
+ */
 function isLive(event, at = new Date()) {
-  return at >= eventStart(event) && at <= eventEnd(event);
+  return isLiveWindow(event, at);
 }
 
 function computeStatus(event, at = new Date()) {
-  const graceEnd = new Date(eventStart(event).getTime() + (event.grace_minutes || 0) * 60000);
-  return at <= graceEnd ? "present" : "late";
+  return arrivalStatus(event, at);
 }
 
 async function isEnrolled(eventId, programId) {
@@ -35,7 +32,7 @@ async function getEvent(eventId) {
 }
 
 async function canScan(user, eventId) {
-  if (user.role === "admin") return true;
+  if (user.role === "admin" || user.role === "superadmin") return true;
   const { data, error } = await admin
     .from("event_organizers")
     .select("event_id")
@@ -71,8 +68,6 @@ async function logAttempt(entry) {
 }
 
 module.exports = {
-  eventStart,
-  eventEnd,
   isLive,
   computeStatus,
   isEnrolled,

@@ -27,9 +27,8 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   text: {
-    fontFamily: fonts.bold,
-    fontSize: 10.5,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    letterSpacing: 0,
   },
 });

@@ -13,4 +13,4 @@ const options = { auth: { autoRefreshToken: false, persistSession: false } };
 const admin = createClient(url, serviceKey, options);
 const anon = anonKey ? createClient(url, anonKey, options) : admin;
 
-module.exports = { admin, anon };
+module.exports = { admin, anon, url, anonKey };

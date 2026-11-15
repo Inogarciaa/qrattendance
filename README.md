@@ -6,7 +6,9 @@ Human-in-the-Loop Visual Verification."**
 
 The system uses rotating QR codes (30-second lifetime), two scanning modes
 (gatekeeper and self-service), and an organizer verification step before an
-attendance record is saved.
+attendance record is saved. Self-service check-ins add a **venue geofence** as a
+second gate: the rotating token proves the code is fresh, and the fence proves the
+phone is at the event.
 
 ## Applications
 
@@ -14,7 +16,7 @@ attendance record is saved.
 | --- | --- | --- |
 | `backend/` | Express REST API over Supabase | All clients |
 | `frontend/` | React + Vite web dashboard | Superadmin, Admin |
-| `mobile/` | Expo / React Native app (planned) | Student, Organizer |
+| `mobile/` | Expo / React Native app (Expo Go) | Student, Organizer |
 | `supabase/` | PostgreSQL schema, RLS policies, seed data | Developers |
 | `docs/` | Analysis, data model, folder guide | Developers |
 
@@ -40,7 +42,15 @@ attendance record is saved.
    - `supabase/migrations/0001_schema.sql`
    - `supabase/migrations/0002_rls.sql`
    - `supabase/migrations/0003_superadmin.sql`
+   - `supabase/migrations/0004_profiles_email.sql`
+   - `supabase/migrations/0005_signup_approval.sql`
+   - `supabase/migrations/0006_geofence.sql`
    - `supabase/seed.sql`
+
+   Or paste the combined `supabase/apply_all.sql` once in the SQL editor.
+3. Enable **Google** sign-in and the project's custom SMTP in the Supabase
+   dashboard — see [`supabase/README.md`](supabase/README.md). This is what makes
+   student sign-up and emailed password-reset codes work.
 
 ### 2. API
 
@@ -67,17 +77,62 @@ The web app runs at `http://localhost:5173`.
 **Sign in** with the superadmin or admin account configured in the seed script.
 Run `npm run seed` to print the current accounts.
 
-If `SUPABASE_URL` still contains the placeholder `your-project`, the API runs in
-**local development mode**: accounts, programs, and events are stored in
-`backend/data/local-db.json`, so no Supabase project is required. Run
-`npm run seed` to print the accounts again. With real Supabase credentials, apply
-the migrations (including `0003_superadmin.sql`) first.
+`backend/.env` decides where data lives via `DATA_MODE`:
+
+- `DATA_MODE=supabase` — use Supabase (requires the migration above plus a real
+  `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`).
+- `DATA_MODE=local` — use `backend/data/local-db.json`, no Supabase project needed.
+- empty — auto-detect from the credentials.
+
+Check the current state with `curl http://localhost:3000/api/health`; it reports
+`mode` and a live `database` probe.
+
+### 4. Mobile app
+
+```bash
+cd mobile
+npm install
+npx expo start
+```
+
+Install **Expo Go** and scan the terminal QR (Android) or use the Camera app
+(iPhone).
+
+| Role | School ID | Birthdate |
+| --- | --- | --- |
+| Student | `2023-0142` | `2003-04-12` |
+| Organizer | `2024-0345` | `2004-06-30` |
+
+Sign in with the school ID and birthdate, or press **Continue with Google**. New
+accounts use one of the two sign-up buttons — **Sign up as student** or **Sign up as
+organizer** — and stay pending until an admin approves them on the web dashboard's
+*Approvals* page. The mobile app needs `DATA_MODE=supabase` because it uses real
+rotating tokens.
+
+#### Reaching the API from a phone
+
+`localhost` on a phone points at the phone itself. Either:
+
+- **Tunnel** — `cloudflared tunnel --url http://localhost:3000` (or
+  `ngrok http 3000`) and paste the `https://…` URL into the **Server** field on the
+  sign-in screen.
+- **Same Wi-Fi** — use the computer's LAN address, e.g.
+  `http://192.168.1.10:3000`, in the same **Server** field.
+
+Tap **Save and test**; it shows `Connected · supabase mode · database ok`. The URL
+is stored on the device. Copy `mobile/.env.example` to `mobile/.env` to bake in a
+default instead, then restart Metro with `npx expo start --clear`. Quick-tunnel
+URLs change on every restart, so prefer the in-app field.
+
+See [`mobile/README.md`](mobile/README.md) for screens, QR payloads, and
+troubleshooting.
 
 ### Root shortcuts
 
 ```bash
 npm run dev:api      # start the Express API
 npm run dev:web      # start the web dashboard
+npm run dev:mobile   # start the Expo dev server
 npm run build:web    # production build of the web app
 npm run seed         # seed Supabase or the local dev database
 ```
@@ -107,7 +162,8 @@ npm run seed         # seed Supabase or the local dev database
 
 | Area | Status |
 | --- | --- |
-| Supabase schema + RLS | Implemented, with `superadmin` added in `0003_superadmin.sql` |
-| Express API | Implemented (auth, tokens, scans, events, reports) |
-| Web dashboard | Role-based login and Create Event are live; dashboard/reports/students still use demo data |
-| Mobile app | Prototype with mock data; real API wiring pending |
+| Supabase schema + RLS | Implemented, including `superadmin` (`0003`), the sign-up approval column (`0005`) and venue geofencing (`0006`) |
+| Express API | Implemented (auth, onboarding, approval, tokens, scans, geofence, events, reports, health) and connected to Supabase |
+| Web dashboard | Login, dashboard, students search, approvals queue, events, and Create Event (draggable venue pin on an OpenStreetMap + fence radius) use real API data; Reports and Settings still use demo data |
+| Mobile app | Student and organizer flows run on the real API: student/organizer Google sign-up, approval wait, password reset by emailed code, rotating QR, self check-in with a location check, gatekeeper scan, events, history, profile |
+| Local mode | `DATA_MODE=local` still works for API/web development with `backend/data/local-db.json` |

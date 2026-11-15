@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Icon from "../components/ui/Icon";
 import CreateEventPage from "../features/events/CreateEventPage";
 import DashboardPage from "../features/dashboard/DashboardPage";
+import ApprovalsPage from "../features/approvals/ApprovalsPage";
 import HelpPage from "../features/help/HelpPage";
 import LoginPage from "../features/auth/LoginPage";
 import ReportsPage from "../features/reports/ReportsPage";
@@ -15,6 +16,7 @@ const MAIN_NAV = [
   { label: "Reports", icon: "rep" },
   { label: "Create Event", icon: "cal" },
   { label: "Students", icon: "usr" },
+  { label: "Approvals", icon: "uc" },
 ];
 
 const GENERAL_NAV = [
@@ -115,10 +117,11 @@ export default function App() {
   }
 
   const pages = {
-    Dashboard: <DashboardPage />,
+    Dashboard: <DashboardPage onNavigate={navigate} />,
     Reports: <ReportsPage toast={setToastMessage} />,
     "Create Event": <CreateEventPage toast={setToastMessage} />,
-    "Search Students": <SearchStudentsPage />,
+    Students: <SearchStudentsPage />,
+    Approvals: <ApprovalsPage />,
     Settings: (
       <SettingsPage
         user={{ name: user.full_name, email: user.email }}

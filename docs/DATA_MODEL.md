@@ -65,7 +65,7 @@ admin-account management remains superadmin-only.
 
 | Entity | Purpose |
 | --- | --- |
-| `programs` | Academic programs (BSIT, BSBA, BSED, …) used for audiences and student profiles. |
+| `programs` | Academic programs (SBIT, ARFIEN, SSLATE, SHTM) used for audiences and student profiles. |
 | `profiles` | Application profile for every account. Extends Supabase `auth.users`. |
 | `events` | An event, its schedule, grace period, scan mode, and status. |
 | `event_organizers` | Which organizer accounts may gatekeeper-scan an event. |
@@ -123,6 +123,7 @@ erDiagram
         date birthdate
         text photo_url
         boolean is_active
+        timestamptz approved_at
         timestamptz last_login_at
         timestamptz created_at
         timestamptz updated_at
@@ -140,6 +141,9 @@ erDiagram
         scan_mode scan_mode
         event_status status
         int qr_window_seconds
+        double latitude
+        double longitude
+        int geofence_radius_m
         uuid created_by FK
         timestamptz created_at
         timestamptz updated_at
@@ -178,6 +182,10 @@ erDiagram
         uuid scanned_by FK
         uuid token_id FK
         text device_info
+        numeric distance_m
+        numeric accuracy_m
+        boolean location_verified
+        boolean location_mocked
     }
 
     SCAN_ATTEMPTS {
@@ -245,8 +253,8 @@ erDiagram
 | Column | Type | Constraints | Notes |
 | --- | --- | --- | --- |
 | `id` | `serial` | PK | Integer is fine; programs are a small reference table. |
-| `code` | `text` | unique, not null | e.g. `BSIT`. |
-| `name` | `text` | not null | e.g. `BS Information Technology`. |
+| `code` | `text` | unique, not null | e.g. `SBIT`. |
+| `name` | `text` | not null | e.g. `SBIT`. |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 
 ### 5.2 `profiles` — Implemented, with proposed fields
@@ -259,12 +267,13 @@ the campus profile.
 | `id` | `uuid` | PK, FK `auth.users(id)` on delete cascade | Use the Auth user ID as the profile ID. |
 | `school_id` | `text` | unique, not null | Login identifier, e.g. `2023-0142`. |
 | `full_name` | `text` | not null | Display name and verification name. |
-| `role` | `user_role` | not null, default `student` | Proposed values: `superadmin`, `admin`, `organizer`, `student`. |
-| `program_id` | `integer` | FK `programs(id)`, nullable | Null for admins/superadmins; organizers may belong to a program. |
-| `year_level` | `integer` | nullable | Used for audience filtering and verification display. |
+| `role` | `user_role` | not null, default `student` | Proposed values: `superadmin`, `admin`, `organizer`, `student`. Self sign-up may only pick `student` or `organizer`. |
+| `program_id` | `integer` | FK `programs(id)`, nullable | Null for admins/superadmins; for organizers this is the **department they chose** at sign-up (SBIT / ARFIEN / SSLATE / SHTM). It does not drive geofencing or event assignment. |
+| `year_level` | `integer` | nullable | Students only. Organizers leave it null. |
 | `birthdate` | `date` | nullable | Used by the prototype login derivation. Treat as private. |
 | `photo_url` | `text` | nullable | Student photo for gatekeeper verification. |
 | `is_active` | `boolean` | not null, default `true` | Soft-disable an account. |
+| `approved_at` | `timestamptz` | nullable | `NULL` plus `is_active = false` means "self sign-up waiting for an admin"; stamping it approves the account (`0005`). |
 | `last_login_at` | `timestamptz` | nullable | **Proposed**; useful for account auditing. |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | nullable | **Proposed**; update on profile edits. |
@@ -288,6 +297,8 @@ in `auth.users`. The synthetic email is derived by the API
 | `scan_mode` | `scan_mode` | not null, default `gatekeeper` | `gatekeeper`, `self_service`, or `dual`. |
 | `status` | `event_status` | not null, default `scheduled` | `draft`, `scheduled`, `live`, `completed`, `cancelled`. |
 | `qr_window_seconds` | `integer` | not null, default `30` | Token TTL for the display and student QR. |
+| `latitude`, `longitude` | `double precision` | nullable | Venue pin for the self check-in fence (`0006`). Null = no fence. |
+| `geofence_radius_m` | `integer` | not null, default `100` | Metres around the pin that count as "at the venue"; validated to 25–1000. |
 | `created_by` | `uuid` | FK `profiles(id)` | Admin/superadmin who created the event. |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | nullable | **Proposed**. |
@@ -319,8 +330,8 @@ Defines the expected audience. An **empty set** for an event means "all programs
 **Recommended semantics**
 
 - `program_id = NULL` and `year_level = NULL` → all programs, all years.
-- `program_id = BSIT`, `year_level = NULL` → all BSIT years.
-- `program_id = BSIT`, `year_level = 3` → only BSIT third years.
+- `program_id = SBIT`, `year_level = NULL` → all SBIT years.
+- `program_id = SBIT`, `year_level = 3` → only SBIT third years.
 
 To support "all programs" and multiple year levels cleanly, use a surrogate
 `id` primary key and a unique index on
@@ -364,6 +375,10 @@ One row per student per event.
 | `scanned_at` | `timestamptz` | not null, default `now()` | Actual check-in time (server time). |
 | `scanned_by` | `uuid` | FK `profiles(id)`, nullable | Organizer/admin who confirmed; null for self-service. |
 | `token_id` | `uuid` | FK `qr_tokens(id)`, nullable | Token used for the accepted scan. |
+| `distance_m` | `numeric` | nullable | Metres from the venue pin at self check-in (`0006`). |
+| `accuracy_m` | `numeric` | nullable | The fix's own error radius, in metres (`0006`). |
+| `location_verified` | `boolean` | nullable | `true` inside the fence, `false` allowed but flagged, `null` no fence applied (`0006`). |
+| `location_mocked` | `boolean` | nullable | Device reported a simulated location, so the fence result is not evidence (`0006`). |
 | `device_info` | `text` | nullable | **Proposed**; scanner device/browser metadata. |
 
 **Constraint:** `UNIQUE (event_id, student_id)` prevents duplicate attendance.
@@ -502,11 +517,22 @@ These values are computed from `attendance` and event settings:
 
 1. Admin opens the display terminal for a `self_service` or `dual` event.
 2. Web app requests an event token every 30 seconds and renders a large QR.
-3. Student scans it in the mobile app.
-4. Client calls `POST /api/scan/self-checkin` with `{ event_id, token }`.
+3. Student scans it in the mobile app. The app captures a foreground location fix
+   on the same tap (8 s cap; missing permission or a bad fix is not fatal).
+4. Client calls `POST /api/scan/self-checkin` with
+   `{ event_id, token, latitude?, longitude?, accuracy?, mocked? }`.
 5. Server validates event mode, liveness, token subject, audience, and duplicate
-   state, then inserts `attendance` with method `self_service`.
-6. Every rejection is written to `scan_attempts`.
+   state. Then, **only for events with coordinates**, it compares the fix with the
+   venue pin:
+   - inside `geofence_radius_m` → `location_verified = true` with `distance_m` /
+     `accuracy_m`;
+   - no fix, `accuracy > 50 m`, or `mocked` → accepted and flagged
+     `location_verified = false`;
+   - trustworthy fix outside the radius → `403 out_of_area`, logged in
+     `scan_attempts`.
+6. A passing check-in inserts `attendance` with method `self_service`.
+7. Every rejection is written to `scan_attempts` (`expired`, `consumed`,
+   `not_enrolled`, `out_of_area`, …).
 
 ### 7.5 Close event and export
 
@@ -599,7 +625,7 @@ the superadmin and mobile features.
 
 The current seed (`supabase/seed.sql` and `backend/scripts/seed.js`) creates:
 
-- Programs: BSIT, BSBA, BSED.
+- Programs: SBIT, ARFIEN, SSLATE, SHTM.
 - Accounts: one admin (`ADMIN-0001`), two organizers, five students.
 - One sample event using `dual` mode.
 

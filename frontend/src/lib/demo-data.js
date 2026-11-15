@@ -44,14 +44,14 @@ export const isLive = (event) => {
 };
 
 export const STUDENTS = [
-  ["2023-0142", "Maria Santos", "BSIT"],
-  ["2023-0157", "Jose Ramirez", "BSIT"],
-  ["2024-0210", "Angela Cruz", "BSBA"],
-  ["2024-0233", "Paolo Mendoza", "BSIT"],
-  ["2023-0318", "Kristine Lopez", "BSED"],
-  ["2024-0345", "Rafael Dizon", "BSIT"],
-  ["2023-0402", "Bea Villanueva", "BSBA"],
-  ["2024-0419", "Carlo Yap", "BSED"],
+  ["2023-0142", "Maria Santos", "SBIT"],
+  ["2023-0157", "Jose Ramirez", "SBIT"],
+  ["2024-0210", "Angela Cruz", "ARFIEN"],
+  ["2024-0233", "Paolo Mendoza", "SHTM"],
+  ["2023-0318", "Kristine Lopez", "SSLATE"],
+  ["2024-0345", "Rafael Dizon", "SBIT"],
+  ["2023-0402", "Bea Villanueva", "ARFIEN"],
+  ["2024-0419", "Carlo Yap", "SHTM"],
 ].map(([id, name, program]) => ({ id, name, program }));
 
 const SEQUENCE = ["Present", "Present", "Late", "Present", "Absent", "Late", "Present", "Absent"];
@@ -75,7 +75,7 @@ export const ATTENDANCE = EVENTS.flatMap((event, eventIndex) =>
   })
 );
 
-export const PROGRAMS = ["BSIT", "BSBA", "BSED"];
+export const PROGRAMS = ["SBIT", "ARFIEN", "SSLATE", "SHTM"];
 export const STATUSES = ["Present", "Late", "Absent"];
 
 export const SCAN_MODES = [

@@ -76,6 +76,11 @@ th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--br);white-
 .db-hero-badge{background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:12px 18px;text-align:center;flex:none;z-index:1}
 .db-hero-badge b{display:block;font-size:28px;font-weight:800;line-height:1}
 .db-hero-badge span{font-size:11px;opacity:.7;margin-top:2px;display:block}
+.db-hero-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;position:relative;z-index:1}
+.db-hero-fence{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:rgba(255,255,255,.8);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:5px 12px}
+.db-hero-fence .i{width:14px;height:14px}
+.db-hero-action{font:inherit;font-size:11.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.26);border-radius:8px;padding:6px 12px;cursor:pointer;transition:background .15s}
+.db-hero-action:hover{background:rgba(255,255,255,.24)}
 .ev-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}
 .ev-tab{font:inherit;font-size:13px;font-weight:500;padding:7px 16px;border-radius:999px;border:1.5px solid var(--br);background:var(--sf);color:var(--mu);cursor:pointer;transition:all .15s}
 .ev-tab:hover{border-color:var(--brand);color:var(--brand)}
@@ -85,7 +90,7 @@ details{border-bottom:1px solid var(--br);padding:10px 0}summary{cursor:pointer;
 .sum{text-align:left;margin:18px 0;border:1px solid var(--br);border-radius:10px}
 .sum div{display:flex;gap:12px;padding:10px 14px;border-bottom:1px solid var(--br)}.sum div:last-child{border:0}.sum dt{width:130px;color:var(--mu);flex:none}.sum dd{margin:0;font-weight:500}
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:grid;place-items:center;z-index:20;padding:16px}
-.dlg{background:var(--sf);border-radius:12px;padding:22px;max-width:380px;width:100%}.dlg h2{margin:0 0 6px;font-size:17px}.dlg p{margin:0 0 18px;color:var(--mu)}
+.dlg{background:var(--sf);border-radius:12px;padding:22px;max-width:380px;width:100%;max-height:calc(100vh - 32px);overflow-y:auto}.dlg h2{margin:0 0 6px;font-size:17px}.dlg p{margin:0 0 18px;color:var(--mu)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;max-width:90%}
 .out{align-items:center;justify-content:center;padding:16px}.out .card{max-width:400px;width:100%}
 @media(min-width:1280px){.content{padding:44px 56px 64px}}
@@ -154,3 +159,13 @@ details{border-bottom:1px solid var(--br);padding:10px 0}summary{cursor:pointer;
 .login-footer{margin:22px 0 0;text-align:center;font-size:10.5px;color:var(--mu)}
 .role-pill{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--brand);background:var(--tint);border:1px solid rgba(37,99,235,.2);border-radius:999px;padding:3px 8px;margin-left:2px}
 @media(max-width:860px){.login-shell{grid-template-columns:1fr}.login-hero{display:none}.login-panel{padding:28px 18px;min-height:100vh}.login-card{padding:26px 22px}}
+
+/* --- Venue map picker --- */
+.map-field{position:relative;border:1px solid var(--br);border-radius:12px;overflow:hidden;margin:4px 0 14px}
+.map-canvas{height:320px;width:100%;background:#e8eef6}
+.map-overlay{position:absolute;left:12px;right:12px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid var(--br);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--mu);text-align:center;pointer-events:none}
+.map-readout{position:absolute;left:12px;bottom:12px;background:rgba(15,28,63,.85);color:#fff;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;pointer-events:none}
+.lq-pin{background:none;border:0}
+.lq-pin-dot{display:block;width:18px;height:18px;margin:4px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--brand);border:2px solid #fff;box-shadow:0 2px 6px rgba(15,28,63,.4)}
+.location-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+@media(max-width:860px){.map-canvas{height:260px}}

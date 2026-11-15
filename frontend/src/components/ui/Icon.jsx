@@ -14,6 +14,7 @@ const PATHS = {
   inf: "M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01",
   chk: "M20 6L9 17l-5-5",
   mnu: "M3 6h18M3 12h18M3 18h18",
+  pin: "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6",
 };
 
 export default function Icon({ name, className = "i" }) {

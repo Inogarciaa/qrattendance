@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Easing,
   Modal,
@@ -14,31 +15,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { getEvent, getEvents, parseEventQr, selfCheckIn } from "../../api/client";
 import { Button } from "../../components/Button";
 import { StatusBadge } from "../../components/StatusBadge";
-import { studentScanEvent } from "../../mock/data";
+import { formatTimestamp } from "../../lib/format";
+import { captureLocationFix, LOCATION_ERROR_MESSAGES } from "../../lib/location";
 import { colors, fonts, radius, spacing } from "../../theme/tokens";
-
-const OUTCOMES = [
-  {
-    kind: "present",
-    title: "Check-in confirmed",
-    message: "You're marked present for this event.",
-    time: "8:04 AM",
-  },
-  {
-    kind: "late",
-    title: "Checked in late",
-    message: "You're in, but this event marks you as late.",
-    time: "8:37 AM",
-  },
-  {
-    kind: "duplicate",
-    title: "Already checked in",
-    message: "This QR was already used. Duplicate scans are ignored.",
-    time: "8:04 AM",
-  },
-];
 
 export default function StudentScanScreen() {
   const insets = useSafeAreaInsets();
@@ -46,9 +28,13 @@ export default function StudentScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
   const [scanning, setScanning] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
-  const outcomeIndex = useRef(0);
+  const [liveEvents, setLiveEvents] = useState([]);
+  const [notice, setNotice] = useState("");
+
   const scanLock = useRef(false);
+  const noticeTimer = useRef(null);
 
   const [lineY] = useState(() => new Animated.Value(0));
 
@@ -73,14 +59,109 @@ export default function StudentScanScreen() {
     return () => loop.stop();
   }, [lineY]);
 
-  const handleScan = () => {
-    if (scanLock.current || !scanning) return;
+  useEffect(
+    () => () => {
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    },
+    []
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      getEvents()
+        .then((events) => {
+          if (active) setLiveEvents(events.filter((event) => event.status === "live"));
+        })
+        .catch(() => {
+          if (active) setLiveEvents([]);
+        });
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  const showNotice = (message) => {
+    setNotice(message);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(""), 4000);
+  };
+
+  const handleBarcodeScanned = async ({ data }) => {
+    if (scanLock.current || busy) return;
+
+    const parsed = parseEventQr(data);
+    if (!parsed) {
+      scanLock.current = true;
+      showNotice("That is a student QR. Scan the event code shown by the organizer.");
+      setTimeout(() => {
+        scanLock.current = false;
+      }, 1800);
+      return;
+    }
+
     scanLock.current = true;
-    setScanning(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    const outcome = OUTCOMES[outcomeIndex.current % OUTCOMES.length];
-    outcomeIndex.current += 1;
-    setResult(outcome);
+    setBusy(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+    // Ask for the event details and a location fix at the same time so the
+    // GPS wait does not add to the round trip. A failed fix is not fatal.
+    const [event, fix] = await Promise.all([
+      getEvent(parsed.eventId).catch(() => null),
+      captureLocationFix(),
+    ]);
+
+    try {
+      const response = await selfCheckIn({
+        eventId: parsed.eventId,
+        token: parsed.token,
+        location: fix.error ? null : fix,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+      const flagged = response.location?.applied && response.location.verified === false;
+      setResult({
+        kind: response.attendance.status,
+        title: response.attendance.status === "late" ? "Checked in late" : "Checked in",
+        message: flagged
+          ? LOCATION_ERROR_MESSAGES[fix.error] ||
+            "Saved without location verification — we could not confirm you were at the venue."
+          : null,
+        time: formatTimestamp(response.attendance.scanned_at),
+        event,
+      });
+    } catch (err) {
+      const duplicate = err?.status === 409 && /already/i.test(err?.message || "");
+      const notLive = err?.status === 409 && !duplicate;
+      const outside = err?.payload?.code === "out_of_area" || err?.code === "out_of_area";
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      setResult({
+        kind: duplicate ? "duplicate" : outside ? "outside" : notLive ? "closed" : "error",
+        title: duplicate
+          ? "Already checked in"
+          : outside
+            ? "You are outside the venue"
+            : notLive
+              ? "Check-in closed"
+              : "Could not check in",
+        message: outside
+          ? `${err.message}. Move closer to the venue and scan again.`
+          : notLive
+            ? "This event is not accepting check-ins right now."
+            : err?.message || "Something went wrong. Please try again.",
+        time:
+          duplicate && err.payload?.existing?.scanned_at
+            ? formatTimestamp(err.payload.existing.scanned_at)
+            : "",
+        event,
+      });
+    } finally {
+      setBusy(false);
+      setScanning(false);
+    }
   };
 
   const scanAgain = () => {
@@ -89,48 +170,37 @@ export default function StudentScanScreen() {
     setScanning(true);
   };
 
+  const openHistory = () => {
+    scanLock.current = false;
+    setResult(null);
+    setScanning(true);
+    router.push("/(student)/history");
+  };
+
   if (!permission) {
     return <View style={styles.screen} />;
   }
 
   if (!permission.granted) {
     return (
-      <View style={[styles.permission, { paddingTop: insets.top + 24 }]}>
+      <View style={styles.permission}>
         <View style={styles.permissionIcon}>
-          <Ionicons name="camera-outline" size={30} color={colors.brand} />
+          <Ionicons name="camera-outline" size={28} color={colors.brand} />
         </View>
-        <Text style={styles.permissionTitle}>Camera access needed</Text>
+        <Text style={styles.permissionTitle}>Camera access</Text>
         <Text style={styles.permissionText}>
-          LacoQR uses your camera to scan event attendance QR codes. Nothing is
-          recorded or uploaded in this prototype.
+          Allow camera access to scan event QR codes.
         </Text>
         <Button
           label="Allow camera"
-          icon="camera-outline"
           onPress={requestPermission}
           style={styles.permissionButton}
-        />
-        <Button
-          label="Simulate check-in instead"
-          variant="secondary"
-          icon="scan-outline"
-          onPress={handleScan}
-          style={styles.permissionSecondary}
-        />
-
-        <ResultSheet
-          result={result}
-          onClose={scanAgain}
-          onHistory={() => {
-            scanLock.current = false;
-            setResult(null);
-            setScanning(true);
-            router.push("/(student)/history");
-          }}
         />
       </View>
     );
   }
+
+  const liveEvent = liveEvents[0] || null;
 
   return (
     <View style={styles.screen}>
@@ -139,15 +209,12 @@ export default function StudentScanScreen() {
         facing="back"
         enableTorch={torch}
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-        onBarcodeScanned={scanning ? handleScan : undefined}
+        onBarcodeScanned={scanning ? handleBarcodeScanned : undefined}
       />
 
       <View style={styles.overlay}>
         <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
-          <View>
-            <Text style={styles.eyebrow}>STUDENT CHECK-IN</Text>
-            <Text style={styles.title}>Scan event QR</Text>
-          </View>
+          <Text style={styles.title}>Scan QR</Text>
           <Pressable
             onPress={() => setTorch((value) => !value)}
             style={[styles.torch, torch && styles.torchActive]}
@@ -188,27 +255,34 @@ export default function StudentScanScreen() {
         </View>
 
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 30 }]}>
-          <View style={styles.eventChip}>
-            <View style={styles.liveDot} />
-            <Text style={styles.eventChipText}>{studentScanEvent.title}</Text>
-          </View>
-          <Text style={styles.hint}>Align the QR code inside the frame</Text>
-          <Pressable onPress={handleScan} style={styles.simulate} accessibilityLabel="Simulate a QR scan">
-            <Ionicons name="scan" size={16} color={colors.white} />
-            <Text style={styles.simulateText}>Simulate scan</Text>
-          </Pressable>
+          {busy ? (
+            <View style={styles.checking}>
+              <ActivityIndicator color={colors.white} size="small" />
+              <Text style={styles.checkingText}>Checking your location…</Text>
+            </View>
+          ) : (
+            <Text style={styles.hint}>Scan the rotating code shown at the venue.</Text>
+          )}
+
+          {liveEvent ? (
+            <View style={styles.eventChip}>
+              <View style={styles.liveDot} />
+              <Text style={styles.eventChipText} numberOfLines={1}>
+                {liveEvent.title}
+              </Text>
+            </View>
+          ) : null}
+
+          {notice ? (
+            <View style={styles.notice}>
+              <Ionicons name="alert-circle" size={15} color={colors.white} />
+              <Text style={styles.noticeText}>{notice}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
-      <ResultSheet
-        result={result}
-        onClose={scanAgain}
-        onHistory={() => {
-          setResult(null);
-          setScanning(true);
-          router.push("/(student)/history");
-        }}
-      />
+      <ResultSheet result={result} onClose={scanAgain} onHistory={openHistory} />
     </View>
   );
 }
@@ -220,12 +294,17 @@ function Corner({ style }) {
 function ResultSheet({ result, onClose, onHistory }) {
   const insets = useSafeAreaInsets();
   const visible = Boolean(result);
+  const duplicate = result?.kind === "duplicate";
 
-  const tone = {
-    present: { color: colors.green, bg: colors.greenSoft, icon: "checkmark" },
-    late: { color: colors.amber, bg: colors.amberSoft, icon: "time" },
-    duplicate: { color: colors.red, bg: colors.redSoft, icon: "alert" },
-  }[result?.kind || "present"];
+  const tone =
+    {
+      present: { color: colors.green, bg: colors.greenSoft, icon: "checkmark" },
+      late: { color: colors.amber, bg: colors.amberSoft, icon: "time" },
+      duplicate: { color: colors.amber, bg: colors.amberSoft, icon: "information-circle" },
+      outside: { color: colors.red, bg: colors.redSoft, icon: "location-outline" },
+      closed: { color: colors.muted, bg: "#f3f4f6", icon: "lock-closed" },
+      error: { color: colors.red, bg: colors.redSoft, icon: "alert-circle" },
+    }[result?.kind] || { color: colors.red, bg: colors.redSoft, icon: "alert-circle" };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -234,45 +313,54 @@ function ResultSheet({ result, onClose, onHistory }) {
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 22 }]}>
           <View style={styles.handle} />
           <View style={[styles.resultIcon, { backgroundColor: tone.bg }]}>
-            <Ionicons name={tone.icon} size={30} color={tone.color} />
+            <Ionicons name={tone.icon} size={28} color={tone.color} />
           </View>
           <Text style={styles.resultTitle}>{result?.title}</Text>
-          <Text style={styles.resultMessage}>{result?.message}</Text>
 
-          <View style={styles.resultEvent}>
-            <View style={styles.resultEventTop}>
-              <Text style={styles.resultEventTitle} numberOfLines={2}>
-                {studentScanEvent.title}
-              </Text>
-              <StatusBadge
-                status={result?.kind === "duplicate" ? "absent" : result?.kind}
-                label={result?.kind === "duplicate" ? "Duplicate" : undefined}
-              />
+          {result?.event ? (
+            <View style={styles.resultEvent}>
+              <View style={styles.resultEventTop}>
+                <Text style={styles.resultEventTitle} numberOfLines={2}>
+                  {result.event.title}
+                </Text>
+                <StatusBadge
+                  status={duplicate ? "absent" : result?.kind}
+                  label={
+                    duplicate
+                      ? "Duplicate"
+                      : result?.kind === "outside"
+                        ? "Outside venue"
+                        : result?.kind === "closed"
+                          ? "Closed"
+                          : result?.kind === "error"
+                            ? "Failed"
+                            : undefined
+                  }
+                />
+              </View>
+              <View style={styles.resultMetaRow}>
+                <Ionicons name="location-outline" size={14} color={colors.muted} />
+                <Text style={styles.resultMeta} numberOfLines={1}>
+                  {result.event.venue || "—"}
+                </Text>
+              </View>
+              <View style={styles.resultMetaRow}>
+                <Ionicons name="calendar-outline" size={14} color={colors.muted} />
+                <Text style={styles.resultMeta}>
+                  {result.event.date}
+                  {result.time ? ` · ${result.time}` : ""}
+                </Text>
+              </View>
             </View>
-            <View style={styles.resultMetaRow}>
-              <Ionicons name="location-outline" size={14} color={colors.muted} />
-              <Text style={styles.resultMeta}>{studentScanEvent.venue}</Text>
-            </View>
-            <View style={styles.resultMetaRow}>
-              <Ionicons name="time-outline" size={14} color={colors.muted} />
-              <Text style={styles.resultMeta}>
-                {studentScanEvent.date} · {result?.time}
-              </Text>
-            </View>
-          </View>
+          ) : null}
 
-          <Button
-            label={result?.kind === "duplicate" ? "Scan another code" : "Done"}
-            onPress={onClose}
-            icon={result?.kind === "duplicate" ? "scan-outline" : "checkmark"}
-            style={styles.sheetButton}
-          />
-          <Button
-            label="View attendance history"
-            variant="ghost"
-            size="md"
-            onPress={onHistory}
-          />
+          {result?.message ? <Text style={styles.resultMessage}>{result.message}</Text> : null}
+          {duplicate ? (
+            <Text style={styles.resultMessage}>This event is already checked in for you.</Text>
+          ) : null}
+
+          <Button label={duplicate ? "Scan another" : "Done"} onPress={onClose} style={styles.sheetButton} />
+          <Button label="View history" variant="ghost" size="md" onPress={onHistory} />
         </View>
       </View>
     </Modal>
@@ -289,19 +377,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     paddingHorizontal: spacing.xxl,
     alignItems: "center",
+    justifyContent: "center",
   },
   permissionIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
+    width: 68,
+    height: 68,
+    borderRadius: 20,
     backgroundColor: colors.tint,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 40,
   },
   permissionTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 22,
+    fontFamily: fonts.bold,
+    fontSize: 21,
     letterSpacing: -0.5,
     color: colors.text,
     marginTop: 20,
@@ -309,19 +397,15 @@ const styles = StyleSheet.create({
   },
   permissionText: {
     fontFamily: fonts.regular,
-    fontSize: 13,
+    fontSize: 13.5,
     lineHeight: 20,
     color: colors.muted,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
   permissionButton: {
     alignSelf: "stretch",
     marginTop: 24,
-  },
-  permissionSecondary: {
-    alignSelf: "stretch",
-    marginTop: 10,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -334,18 +418,11 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     backgroundColor: "rgba(6, 12, 30, 0.55)",
   },
-  eyebrow: {
-    fontFamily: fonts.semibold,
-    fontSize: 9.5,
-    letterSpacing: 1.3,
-    color: "rgba(255,255,255,0.55)",
-  },
   title: {
-    fontFamily: fonts.extrabold,
-    fontSize: 22,
+    fontFamily: fonts.bold,
+    fontSize: 21,
     letterSpacing: -0.5,
     color: colors.white,
-    marginTop: 3,
   },
   torch: {
     width: 42,
@@ -403,6 +480,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     backgroundColor: "rgba(6, 12, 30, 0.55)",
   },
+  hint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "rgba(255,255,255,0.65)",
+    textAlign: "center",
+    marginBottom: 14,
+    maxWidth: 280,
+  },
+  checking: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  checkingText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: "rgba(255,255,255,0.85)",
+  },
   eventChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -426,27 +523,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "rgba(255,255,255,0.85)",
   },
-  hint: {
-    fontFamily: fonts.medium,
-    fontSize: 12.5,
-    color: "rgba(255,255,255,0.6)",
-    marginTop: 14,
-  },
-  simulate: {
+  notice: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
     marginTop: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: radius.pill,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(220, 38, 38, 0.92)",
+    maxWidth: 320,
   },
-  simulateText: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
+  noticeText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    lineHeight: 16,
     color: colors.white,
   },
   modalBackdrop: {
@@ -456,8 +548,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.xxl,
     paddingTop: 12,
   },
@@ -466,32 +558,24 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#cbd5e1",
-    marginBottom: 18,
+    backgroundColor: "#d1d5db",
+    marginBottom: 20,
   },
   resultIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
   },
   resultTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 22,
+    fontFamily: fonts.bold,
+    fontSize: 21,
     letterSpacing: -0.5,
     color: colors.text,
     textAlign: "center",
     marginTop: 14,
-  },
-  resultMessage: {
-    fontFamily: fonts.regular,
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: colors.muted,
-    textAlign: "center",
-    marginTop: 5,
     marginBottom: 18,
   },
   resultEvent: {
@@ -509,7 +593,7 @@ const styles = StyleSheet.create({
   },
   resultEventTitle: {
     flex: 1,
-    fontFamily: fonts.bold,
+    fontFamily: fonts.semibold,
     fontSize: 13.5,
     color: colors.text,
     letterSpacing: -0.1,
@@ -520,9 +604,18 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   resultMeta: {
+    flex: 1,
     fontFamily: fonts.medium,
     fontSize: 11.5,
     color: colors.muted,
+  },
+  resultMessage: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.muted,
+    textAlign: "center",
+    marginTop: 12,
   },
   sheetButton: {
     marginTop: 18,

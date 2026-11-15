@@ -9,9 +9,10 @@ const DB_PATH =
 const DEFAULT_STAFF_PASSWORD = "LacoQR@2026";
 
 const PROGRAMS = [
-  { code: "BSIT", name: "BS Information Technology" },
-  { code: "BSBA", name: "BS Business Administration" },
-  { code: "BSED", name: "BS Education" },
+  { code: "SBIT", name: "SBIT" },
+  { code: "ARFIEN", name: "ARFIEN" },
+  { code: "SSLATE", name: "SSLATE" },
+  { code: "SHTM", name: "SHTM" },
 ];
 
 const PEOPLE = [
@@ -22,7 +23,7 @@ const PEOPLE = [
     email: "organizer1@lacoqr.local",
     role: "organizer",
     password: DEFAULT_STAFF_PASSWORD,
-    program_code: "BSIT",
+    program_code: "SBIT",
   },
   {
     school_id: "ORG-0002",
@@ -30,7 +31,7 @@ const PEOPLE = [
     email: "organizer2@lacoqr.local",
     role: "organizer",
     password: DEFAULT_STAFF_PASSWORD,
-    program_code: "BSBA",
+    program_code: "ARFIEN",
   },
   {
     school_id: "2023-0142",
@@ -38,7 +39,7 @@ const PEOPLE = [
     email: "student1@lacoqr.local",
     role: "student",
     password: DEFAULT_STAFF_PASSWORD,
-    program_code: "BSIT",
+    program_code: "SBIT",
   },
   {
     school_id: "2023-0157",
@@ -46,7 +47,7 @@ const PEOPLE = [
     email: "student2@lacoqr.local",
     role: "student",
     password: DEFAULT_STAFF_PASSWORD,
-    program_code: "BSIT",
+    program_code: "SBIT",
   },
   {
     school_id: "2024-0210",
@@ -54,7 +55,7 @@ const PEOPLE = [
     email: "student3@lacoqr.local",
     role: "student",
     password: DEFAULT_STAFF_PASSWORD,
-    program_code: "BSBA",
+    program_code: "ARFIEN",
   },
   {
     school_id: "2023-0318",
@@ -62,7 +63,7 @@ const PEOPLE = [
     email: "student4@lacoqr.local",
     role: "student",
     password: DEFAULT_STAFF_PASSWORD,
-    program_code: "BSED",
+    program_code: "SSLATE",
   },
 ];
 

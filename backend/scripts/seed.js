@@ -4,22 +4,24 @@ const { toEmail, buildPassword, toBirthdate } = require("../src/lib/password");
 const { isLocalMode } = require("../src/lib/mode");
 const { seedLocalData } = require("../src/lib/local-db");
 const { staffAccounts } = require("../src/lib/staff-accounts");
+const { manilaNow } = require("../src/lib/clock");
 
 const PROGRAMS = [
-  { code: "BSIT", name: "BS Information Technology" },
-  { code: "BSBA", name: "BS Business Administration" },
-  { code: "BSED", name: "BS Education" },
+  { code: "SBIT", name: "SBIT" },
+  { code: "ARFIEN", name: "ARFIEN" },
+  { code: "SSLATE", name: "SSLATE" },
+  { code: "SHTM", name: "SHTM" },
 ];
 
 const PEOPLE = [
   ...staffAccounts(),
-  { school_id: "2023-0142", full_name: "Maria Santos", birthdate: "2003-04-12", role: "student", program_code: "BSIT", year_level: 3 },
-  { school_id: "2023-0157", full_name: "Jose Ramirez", birthdate: "2003-08-02", role: "student", program_code: "BSIT", year_level: 3 },
-  { school_id: "2024-0210", full_name: "Angela Cruz", birthdate: "2004-01-20", role: "student", program_code: "BSBA", year_level: 2 },
-  { school_id: "2024-0233", full_name: "Paolo Mendoza", birthdate: "2004-03-09", role: "student", program_code: "BSIT", year_level: 2 },
-  { school_id: "2023-0318", full_name: "Kristine Lopez", birthdate: "2003-11-25", role: "student", program_code: "BSED", year_level: 3 },
-  { school_id: "2024-0345", full_name: "Rafael Dizon", birthdate: "2004-06-30", role: "organizer", program_code: "BSIT", year_level: 2 },
-  { school_id: "2023-0402", full_name: "Bea Villanueva", birthdate: "2003-02-14", role: "organizer", program_code: "BSBA", year_level: 3 },
+  { school_id: "2023-0142", full_name: "Maria Santos", birthdate: "2003-04-12", role: "student", program_code: "SBIT", year_level: 3 },
+  { school_id: "2023-0157", full_name: "Jose Ramirez", birthdate: "2003-08-02", role: "student", program_code: "SBIT", year_level: 3 },
+  { school_id: "2024-0210", full_name: "Angela Cruz", birthdate: "2004-01-20", role: "student", program_code: "ARFIEN", year_level: 2 },
+  { school_id: "2024-0233", full_name: "Paolo Mendoza", birthdate: "2004-03-09", role: "student", program_code: "SHTM", year_level: 2 },
+  { school_id: "2023-0318", full_name: "Kristine Lopez", birthdate: "2003-11-25", role: "student", program_code: "SSLATE", year_level: 3 },
+  { school_id: "2024-0345", full_name: "Rafael Dizon", birthdate: "2004-06-30", role: "organizer", program_code: "SBIT", year_level: 2 },
+  { school_id: "2023-0402", full_name: "Bea Villanueva", birthdate: "2003-02-14", role: "organizer", program_code: "ARFIEN", year_level: 3 },
 ];
 
 async function findExisting(email) {
@@ -54,6 +56,7 @@ async function ensureUser(person, programByCode) {
       id: userId,
       school_id: person.school_id,
       full_name: person.full_name,
+      email,
       role: person.role,
       program_id: person.program_code ? programByCode[person.program_code] : null,
       year_level: person.year_level,
@@ -98,7 +101,8 @@ async function main() {
 
   const adminAccount = accounts.find((a) => a.role === "admin");
   const organizer = accounts.find((a) => a.role === "organizer");
-  const today = new Date().toISOString().slice(0, 10);
+  // Use the Manila calendar day so a UTC host does not seed "yesterday".
+  const today = manilaNow().date;
 
   const { data: existingEvent } = await admin.from("events").select("id").eq("name", "Sample Seminar").maybeSingle();
   if (!existingEvent) {
@@ -122,9 +126,10 @@ async function main() {
 
     await admin.from("event_organizers").insert({ event_id: event.id, profile_id: organizer.userId });
     await admin.from("event_audiences").insert([
-      { event_id: event.id, program_id: programByCode.BSIT },
-      { event_id: event.id, program_id: programByCode.BSBA },
-      { event_id: event.id, program_id: programByCode.BSED },
+      { event_id: event.id, program_id: programByCode.SBIT },
+      { event_id: event.id, program_id: programByCode.ARFIEN },
+      { event_id: event.id, program_id: programByCode.SSLATE },
+      { event_id: event.id, program_id: programByCode.SHTM },
     ]);
   }
 

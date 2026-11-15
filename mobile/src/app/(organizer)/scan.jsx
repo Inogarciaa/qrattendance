@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -13,67 +13,95 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import {
+  confirmScan,
+  getEvent,
+  getEvents,
+  parseStudentQr,
+  previewScan,
+} from "../../api/client";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
-import { DotStat } from "../../components/Stat";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { DotStat } from "../../components/Stat";
 import { StatusBadge } from "../../components/StatusBadge";
-import { confirmScan, previewScan } from "../../api/client";
-import { useApp } from "../../context/AppContext";
+import { formatTimestamp } from "../../lib/format";
 import { colors, fonts, radius, spacing } from "../../theme/tokens";
 
 export default function OrganizerScanScreen() {
   const { eventId } = useLocalSearchParams();
-  const router = useRouter();
-  const { events, getEvent, confirmAttendance } = useApp();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
-  const paramId = typeof eventId === "string" && eventId ? eventId : null;
-  const [pickedId, setPickedId] = useState(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsError, setEventsError] = useState("");
+  const [manualId, setManualId] = useState(null);
+  const [dismissedParam, setDismissedParam] = useState(null);
   const [torch, setTorch] = useState(false);
   const [candidate, setCandidate] = useState(null);
   const [phase, setPhase] = useState("idle");
-  const scanIndex = useRef(0);
+  const [scanError, setScanError] = useState("");
+
   const scanLock = useRef(false);
+  const errorTimer = useRef(null);
 
-  const activeId = paramId || (pickerOpen ? null : pickedId);
-  const event = activeId ? getEvent(activeId) : null;
+  const paramId = typeof eventId === "string" && eventId ? eventId : null;
 
-  const changeEvent = () => {
-    scanLock.current = false;
-    setPickerOpen(true);
-    setCandidate(null);
-    setPhase("idle");
-    if (paramId) router.setParams({ eventId: "" });
-  };
-
-  const handleScan = async () => {
-    if (scanLock.current || phase !== "idle") return;
-    scanLock.current = true;
-    setPhase("loading");
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    const index = scanIndex.current;
-    scanIndex.current += 1;
+  const load = useCallback(async () => {
     try {
-      const next = await previewScan({ candidateIndex: index });
-      setCandidate(next);
-      setPhase("verifying");
-    } catch {
-      scanLock.current = false;
-      setPhase("idle");
+      const data = await getEvents();
+      setEvents(data);
+      setEventsError("");
+    } catch (err) {
+      setEventsError(err?.message || "Could not load your events.");
+    } finally {
+      setEventsLoading(false);
     }
-  };
+  }, []);
 
-  const handleConfirm = async () => {
-    if (!candidate || candidate.duplicate) return;
-    setPhase("saving");
-    await confirmScan({ student: candidate });
-    confirmAttendance(event.id, candidate.status);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    setPhase("success");
-  };
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const data = await getEvents();
+          if (active) {
+            setEvents(data);
+            setEventsError("");
+          }
+        } catch (err) {
+          if (active) setEventsError(err?.message || "Could not load your events.");
+        } finally {
+          if (active) setEventsLoading(false);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  useEffect(
+    () => () => {
+      if (errorTimer.current) clearTimeout(errorTimer.current);
+    },
+    []
+  );
+
+  // A route param opens this screen for a specific event; changing events
+  // dismisses it so the picker is shown instead of snapping back.
+  const activeId = manualId ?? (paramId && paramId !== dismissedParam ? paramId : null);
+  const event = activeId ? events.find((item) => item.id === activeId) || null : null;
+
+  const showError = useCallback((message) => {
+    setScanError(message);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    errorTimer.current = setTimeout(() => setScanError(""), 4500);
+  }, []);
 
   const resetScanner = () => {
     scanLock.current = false;
@@ -81,15 +109,112 @@ export default function OrganizerScanScreen() {
     setPhase("idle");
   };
 
-  if (!activeId || !event) {
+  const changeEvent = () => {
+    scanLock.current = false;
+    setManualId(null);
+    setDismissedParam(paramId);
+    setCandidate(null);
+    setPhase("idle");
+  };
+
+  const handleBarcodeScanned = async ({ data }) => {
+    if (scanLock.current || phase !== "idle" || !event) return;
+
+    const token = parseStudentQr(data);
+    if (!token) {
+      scanLock.current = true;
+      showError("That is an event QR. Scan the student's personal QR instead.");
+      setTimeout(() => {
+        scanLock.current = false;
+      }, 1500);
+      return;
+    }
+
+    scanLock.current = true;
+    setPhase("loading");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+    try {
+      const preview = await previewScan({ eventId: event.id, token });
+      setCandidate({
+        token,
+        name: preview.student.full_name,
+        schoolId: preview.student.school_id,
+        program: preview.student.program?.code || "",
+        yearLevel: preview.student.year_level,
+        status: preview.predicted_status,
+        duplicate: preview.already_checked_in,
+        time: preview.existing?.scanned_at
+          ? formatTimestamp(preview.existing.scanned_at)
+          : "",
+      });
+      setPhase("verifying");
+    } catch (err) {
+      showError(err?.message || "Could not verify that code.");
+      scanLock.current = false;
+      setPhase("idle");
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!candidate?.token || candidate.duplicate || phase === "saving") return;
+
+    setPhase("saving");
+    try {
+      const result = await confirmScan({ eventId: event.id, token: candidate.token });
+      setCandidate((current) => ({
+        ...current,
+        status: result.attendance.status,
+        time: formatTimestamp(result.attendance.scanned_at),
+      }));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setPhase("success");
+
+      const detail = await getEvent(event.id);
+      setEvents((list) =>
+        list.map((item) =>
+          item.id === event.id
+            ? {
+                ...item,
+                present: detail.present,
+                late: detail.late,
+                absent: detail.absent,
+                enrolled: detail.enrolled,
+              }
+            : item
+        )
+      );
+    } catch (err) {
+      if (err?.status === 409) {
+        const existing = err.payload?.existing;
+        setCandidate((current) => ({
+          ...current,
+          duplicate: true,
+          status: existing?.status || current.status,
+          time: existing?.scanned_at
+            ? formatTimestamp(existing.scanned_at)
+            : current.time,
+        }));
+        setPhase("verifying");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      } else {
+        showError(err?.message || "Could not save that check-in.");
+        resetScanner();
+      }
+    }
+  };
+
+  if (!event) {
     return (
       <EventPicker
         events={events}
+        loading={eventsLoading}
+        error={eventsError}
+        onRetry={load}
         onSelect={(id) => {
-          setPickedId(id);
-          setPickerOpen(false);
-          setPhase("idle");
+          setManualId(id);
           setCandidate(null);
+          setPhase("idle");
         }}
       />
     );
@@ -103,33 +228,22 @@ export default function OrganizerScanScreen() {
     return (
       <View style={styles.permission}>
         <View style={styles.permissionIcon}>
-          <Ionicons name="camera-outline" size={30} color={colors.brand} />
+          <Ionicons name="camera-outline" size={28} color={colors.brand} />
         </View>
-        <Text style={styles.permissionTitle}>Camera access needed</Text>
+        <Text style={styles.permissionTitle}>Camera access</Text>
         <Text style={styles.permissionText}>
-          LacoQR uses your camera to verify student attendance QR codes.
+          Allow camera access to verify student QR codes.
         </Text>
         <Button
           label="Allow camera"
-          icon="camera-outline"
           onPress={requestPermission}
           style={styles.permissionButton}
         />
         <Button
-          label="Simulate student scan"
+          label="Choose another event"
           variant="secondary"
-          icon="scan-outline"
-          onPress={handleScan}
+          onPress={changeEvent}
           style={styles.permissionSecondary}
-        />
-
-        <VerifySheet
-          candidate={candidate}
-          phase={phase}
-          event={event}
-          onCancel={resetScanner}
-          onConfirm={handleConfirm}
-          onNext={resetScanner}
         />
       </View>
     );
@@ -142,18 +256,15 @@ export default function OrganizerScanScreen() {
         facing="back"
         enableTorch={torch}
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-        onBarcodeScanned={phase === "idle" ? handleScan : undefined}
+        onBarcodeScanned={phase === "idle" ? handleBarcodeScanned : undefined}
       />
 
       <View style={styles.overlay}>
         <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
           <View style={styles.topRow}>
-            <View style={styles.topText}>
-              <Text style={styles.eyebrow}>ORGANIZER · VERIFY ATTENDANCE</Text>
-              <Text style={styles.title} numberOfLines={1}>
-                {event.title}
-              </Text>
-            </View>
+            <Text style={styles.title} numberOfLines={1}>
+              {event.title}
+            </Text>
             <Pressable
               onPress={() => setTorch((value) => !value)}
               style={[styles.torch, torch && styles.torchActive]}
@@ -167,7 +278,7 @@ export default function OrganizerScanScreen() {
             </Pressable>
           </View>
           <Pressable onPress={changeEvent} style={styles.changeEvent} hitSlop={8}>
-            <Ionicons name="swap-horizontal" size={13} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="swap-horizontal" size={13} color="rgba(255,255,255,0.65)" />
             <Text style={styles.changeEventText}>Change event</Text>
           </Pressable>
         </View>
@@ -182,24 +293,28 @@ export default function OrganizerScanScreen() {
             {phase === "loading" ? (
               <View style={styles.loadingOverlay}>
                 <ActivityIndicator color={colors.white} />
-                <Text style={styles.loadingText}>Reading code…</Text>
+                <Text style={styles.loadingText}>Verifying code…</Text>
               </View>
             ) : null}
           </View>
           <View style={styles.mask} />
         </View>
 
-        <View style={styles.bottom}>
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + 26 }]}>
+          <Text style={styles.hint}>Point the camera at the student&apos;s personal QR code.</Text>
+
           <View style={styles.countsRow}>
             <DotStat value={event.present} label="present" color={colors.green} />
             <DotStat value={event.late} label="late" color={colors.amber} />
             <DotStat value={event.absent} label="absent" color={colors.red} />
           </View>
-          <Text style={styles.hint}>Point the camera at the student&apos;s QR code</Text>
-          <Pressable onPress={handleScan} style={styles.simulate} accessibilityLabel="Simulate a student scan">
-            <Ionicons name="scan" size={16} color={colors.white} />
-            <Text style={styles.simulateText}>Simulate scan</Text>
-          </Pressable>
+
+          {scanError ? (
+            <View style={styles.scanError}>
+              <Ionicons name="alert-circle" size={15} color={colors.white} />
+              <Text style={styles.scanErrorText}>{scanError}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -215,20 +330,32 @@ export default function OrganizerScanScreen() {
   );
 }
 
-function EventPicker({ events, onSelect }) {
+function EventPicker({ events, loading, error, onRetry, onSelect }) {
   const liveEvents = events.filter((item) => item.status === "live");
   const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.pickerScreen}>
-      <ScreenHeader title="Scan Attendance" subtitle="Select a live event to start verifying" />
+      <ScreenHeader title="Scan" subtitle="Set up gatekeeper check-in" />
       <View style={[styles.pickerContent, { paddingBottom: insets.bottom + 24 }]}>
-        <Text style={styles.pickerLabel}>LIVE EVENTS</Text>
-        {liveEvents.length === 0 ? (
+        <Text style={styles.pickerLabel}>Live events</Text>
+
+        {loading ? (
+          <View style={styles.pickerLoading}>
+            <ActivityIndicator color={colors.brand} />
+          </View>
+        ) : error && events.length === 0 ? (
+          <Card style={styles.pickerEmpty}>
+            <Ionicons name="cloud-offline-outline" size={22} color={colors.red} />
+            <Text style={styles.pickerEmptyText}>{error}</Text>
+            <Button label="Try again" variant="soft" size="md" onPress={onRetry} />
+          </Card>
+        ) : liveEvents.length === 0 ? (
           <Card style={styles.pickerEmpty}>
             <Ionicons name="calendar-outline" size={22} color={colors.muted} />
-            <Text style={styles.pickerEmptyText}>
-              No live events right now. Check the Events tab for what&apos;s next.
+            <Text style={styles.pickerEmptyText}>No live events right now.</Text>
+            <Text style={styles.pickerEmptyHint}>
+              Scanners become available when an event starts.
             </Text>
           </Card>
         ) : (
@@ -240,7 +367,7 @@ function EventPicker({ events, onSelect }) {
             >
               <Card style={styles.pickerCard}>
                 <View style={styles.pickerCardTop}>
-                  <StatusBadge status="live" label="Live" />
+                  <StatusBadge status="live" />
                   <Ionicons name="chevron-forward" size={17} color={colors.muted} />
                 </View>
                 <Text style={styles.pickerTitle}>{item.title}</Text>
@@ -281,36 +408,37 @@ function VerifySheet({ candidate, phase, event, onCancel, onConfirm, onNext }) {
           {success ? (
             <>
               <View style={[styles.resultIcon, { backgroundColor: colors.greenSoft }]}>
-                <Ionicons name="checkmark" size={30} color={colors.green} />
+                <Ionicons name="checkmark" size={28} color={colors.green} />
               </View>
               <Text style={styles.resultTitle}>Attendance recorded</Text>
-              <Text style={styles.resultMessage}>
-                {candidate?.name} is marked {candidate?.status} for this event.
-              </Text>
+              <View style={styles.resultStudent}>
+                <Text style={styles.resultName}>{candidate?.name}</Text>
+                <StatusBadge status={candidate?.status} />
+              </View>
+              {candidate?.time ? <Text style={styles.resultTime}>Checked in at {candidate.time}</Text> : null}
               <View style={styles.countsCard}>
                 <DotStat value={event.present} label="present" color={colors.green} />
                 <DotStat value={event.late} label="late" color={colors.amber} />
                 <DotStat value={event.absent} label="absent" color={colors.red} />
               </View>
-              <Button label="Scan next student" icon="scan-outline" onPress={onNext} style={styles.sheetButton} />
+              <Button label="Scan next" onPress={onNext} style={styles.sheetButton} />
             </>
           ) : (
             <>
-              <Text style={styles.sheetLabel}>STUDENT VERIFICATION</Text>
-
               <View style={styles.studentRow}>
-                <Avatar name={candidate?.name} size={54} />
+                <Avatar name={candidate?.name} size={52} />
                 <View style={styles.studentText}>
                   <Text style={styles.studentName}>{candidate?.name || "Reading…"}</Text>
                   <Text style={styles.studentMeta}>
-                    {candidate?.schoolId} · {candidate?.program} · Year {candidate?.yearLevel}
+                    {[candidate?.schoolId, candidate?.program, candidate?.yearLevel ? `Year ${candidate.yearLevel}` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </Text>
                 </View>
                 {candidate ? <StatusBadge status={candidate.status} /> : null}
               </View>
 
               <View style={styles.eventBox}>
-                <Text style={styles.eventBoxLabel}>CHECKING IN TO</Text>
                 <Text style={styles.eventBoxTitle}>{event.title}</Text>
                 <Text style={styles.eventBoxMeta}>
                   {event.venue} · {event.date}
@@ -319,29 +447,26 @@ function VerifySheet({ candidate, phase, event, onCancel, onConfirm, onNext }) {
 
               {duplicate ? (
                 <View style={styles.warning}>
-                  <Ionicons name="warning" size={17} color={colors.red} />
+                  <Ionicons name="warning" size={16} color={colors.red} />
                   <Text style={styles.warningText}>
-                    This student already checked in. Duplicate scans are ignored.
+                    Already checked in{candidate?.time ? ` at ${candidate.time}` : ""}.
                   </Text>
                 </View>
-              ) : (
-                <View style={styles.infoNote}>
-                  <Ionicons name="shield-checkmark-outline" size={15} color={colors.brand} />
-                  <Text style={styles.infoNoteText}>
-                    Confirm only if the student matches the ID shown above.
-                  </Text>
-                </View>
-              )}
+              ) : null}
 
               {duplicate ? (
-                <Button label="Scan next student" variant="secondary" icon="scan-outline" onPress={onNext} style={styles.sheetButton} />
+                <Button
+                  label="Scan next"
+                  variant="secondary"
+                  onPress={onNext}
+                  style={styles.sheetButton}
+                />
               ) : (
                 <Button
-                  label={phase === "saving" ? "Saving…" : "Confirm attendance"}
-                  icon="checkmark"
+                  label={phase === "saving" ? "Saving…" : "Confirm check-in"}
                   onPress={onConfirm}
                   loading={phase === "saving"}
-                  disabled={!candidate || phase === "loading"}
+                  disabled={!candidate}
                   style={styles.sheetButton}
                 />
               )}
@@ -370,19 +495,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     paddingHorizontal: spacing.xxl,
     alignItems: "center",
-    paddingTop: 80,
+    justifyContent: "center",
   },
   permissionIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
+    width: 68,
+    height: 68,
+    borderRadius: 20,
     backgroundColor: colors.tint,
     alignItems: "center",
     justifyContent: "center",
   },
   permissionTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 22,
+    fontFamily: fonts.bold,
+    fontSize: 21,
     letterSpacing: -0.5,
     color: colors.text,
     marginTop: 20,
@@ -390,11 +515,11 @@ const styles = StyleSheet.create({
   },
   permissionText: {
     fontFamily: fonts.regular,
-    fontSize: 13,
+    fontSize: 13.5,
     lineHeight: 20,
     color: colors.muted,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
   permissionButton: {
     alignSelf: "stretch",
@@ -417,21 +542,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  topText: {
-    flex: 1,
-  },
-  eyebrow: {
-    fontFamily: fonts.semibold,
-    fontSize: 9,
-    letterSpacing: 1.2,
-    color: "rgba(255,255,255,0.55)",
-  },
   title: {
-    fontFamily: fonts.extrabold,
+    flex: 1,
+    fontFamily: fonts.bold,
     fontSize: 18,
     letterSpacing: -0.4,
     color: colors.white,
-    marginTop: 3,
   },
   torch: {
     width: 42,
@@ -457,7 +573,7 @@ const styles = StyleSheet.create({
   changeEventText: {
     fontFamily: fonts.medium,
     fontSize: 11,
-    color: "rgba(255,255,255,0.7)",
+    color: "rgba(255,255,255,0.65)",
   },
   middle: {
     flexDirection: "row",
@@ -491,7 +607,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontFamily: fonts.medium,
-    fontSize: 11.5,
+    fontSize: 12,
     color: colors.white,
   },
   bottom: {
@@ -500,6 +616,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: spacing.xl,
     backgroundColor: "rgba(6, 12, 30, 0.55)",
+  },
+  hint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "rgba(255,255,255,0.65)",
+    textAlign: "center",
+    marginBottom: 14,
+    maxWidth: 280,
   },
   countsRow: {
     flexDirection: "row",
@@ -512,27 +637,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
   },
-  hint: {
-    fontFamily: fonts.medium,
-    fontSize: 12.5,
-    color: "rgba(255,255,255,0.6)",
-    marginTop: 14,
-  },
-  simulate: {
+  scanError: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
     marginTop: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: radius.pill,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(220, 38, 38, 0.92)",
   },
-  simulateText: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
+  scanErrorText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    lineHeight: 16,
     color: colors.white,
   },
   pickerScreen: {
@@ -544,11 +663,14 @@ const styles = StyleSheet.create({
   },
   pickerLabel: {
     fontFamily: fonts.semibold,
-    fontSize: 10,
-    letterSpacing: 1.1,
-    color: colors.muted,
+    fontSize: 13,
+    color: colors.text,
     marginBottom: 10,
     marginLeft: 2,
+  },
+  pickerLoading: {
+    paddingVertical: 32,
+    alignItems: "center",
   },
   pickerEmpty: {
     alignItems: "center",
@@ -562,6 +684,13 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: "center",
   },
+  pickerEmptyHint: {
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    lineHeight: 17,
+    color: colors.muted,
+    textAlign: "center",
+  },
   pickerCard: {
     marginBottom: 10,
   },
@@ -571,7 +700,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   pickerTitle: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.semibold,
     fontSize: 15,
     lineHeight: 20,
     letterSpacing: -0.2,
@@ -585,6 +714,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   metaText: {
+    flex: 1,
     fontFamily: fonts.medium,
     fontSize: 11.5,
     color: colors.muted,
@@ -602,8 +732,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.xxl,
     paddingTop: 12,
   },
@@ -612,15 +742,8 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#cbd5e1",
-    marginBottom: 16,
-  },
-  sheetLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 9.5,
-    letterSpacing: 1.2,
-    color: colors.muted,
-    marginBottom: 12,
+    backgroundColor: "#d1d5db",
+    marginBottom: 20,
   },
   studentRow: {
     flexDirection: "row",
@@ -631,7 +754,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   studentName: {
-    fontFamily: fonts.extrabold,
+    fontFamily: fonts.bold,
     fontSize: 18,
     letterSpacing: -0.4,
     color: colors.text,
@@ -645,30 +768,23 @@ const styles = StyleSheet.create({
   eventBox: {
     backgroundColor: colors.bg,
     borderRadius: radius.md,
-    padding: 13,
+    padding: 14,
     marginTop: 16,
-  },
-  eventBoxLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 8.5,
-    letterSpacing: 1,
-    color: colors.muted,
   },
   eventBoxTitle: {
     fontFamily: fonts.semibold,
     fontSize: 13,
     color: colors.text,
-    marginTop: 3,
   },
   eventBoxMeta: {
     fontFamily: fonts.medium,
-    fontSize: 10.5,
+    fontSize: 11,
     color: colors.muted,
-    marginTop: 2,
+    marginTop: 3,
   },
   warning: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
     backgroundColor: colors.redSoft,
     borderRadius: radius.md,
@@ -678,50 +794,47 @@ const styles = StyleSheet.create({
   warningText: {
     flex: 1,
     fontFamily: fonts.medium,
-    fontSize: 11.5,
-    lineHeight: 17,
+    fontSize: 12,
     color: colors.red,
-  },
-  infoNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    marginTop: 12,
-  },
-  infoNoteText: {
-    flex: 1,
-    fontFamily: fonts.medium,
-    fontSize: 10.5,
-    lineHeight: 15,
-    color: colors.muted,
   },
   sheetButton: {
     marginTop: 18,
   },
   resultIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
   },
   resultTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 22,
+    fontFamily: fonts.bold,
+    fontSize: 21,
     letterSpacing: -0.5,
     color: colors.text,
     textAlign: "center",
     marginTop: 14,
+    marginBottom: 10,
   },
-  resultMessage: {
-    fontFamily: fonts.regular,
-    fontSize: 12.5,
-    lineHeight: 18,
+  resultStudent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  resultName: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.text,
+  },
+  resultTime: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
     color: colors.muted,
     textAlign: "center",
-    marginTop: 5,
-    marginBottom: 18,
+    marginBottom: 16,
   },
   countsCard: {
     flexDirection: "row",
@@ -731,5 +844,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     borderRadius: radius.md,
     paddingVertical: 12,
+    marginTop: 8,
   },
 });

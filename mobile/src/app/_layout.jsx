@@ -8,11 +8,26 @@ import {
 } from "@expo-google-fonts/inter";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { AppProvider } from "../context/AppContext";
+import { AppProvider, useApp } from "../context/AppContext";
 import { colors } from "../theme/tokens";
+
+/** Keeps the router unmounted until the stored session has been read. */
+function AppBoot({ children }) {
+  const { booting } = useApp();
+
+  if (booting) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.navy, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={colors.white} />
+      </View>
+    );
+  }
+
+  return children;
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -31,13 +46,15 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AppProvider>
         <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.bg },
-            animation: "slide_from_right",
-          }}
-        />
+        <AppBoot>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.bg },
+              animation: "slide_from_right",
+            }}
+          />
+        </AppBoot>
       </AppProvider>
     </SafeAreaProvider>
   );

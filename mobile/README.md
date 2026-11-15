@@ -1,72 +1,213 @@
 # LacoQR Mobile
 
-Mobile UI prototype for **LacoQR**, the dynamic QR attendance system for LCCB.
-It covers both roles — **Student** and **Organizer** — and runs in **Expo Go** on
-Android and iPhone.
+The student and organizer app for **LacoQR**, the dynamic QR attendance system for
+LCCB. It runs in **Expo Go** on Android and iPhone, and talks to the real Express
+API in `../backend` — there is no mock data in this app.
 
-> This build uses **mock data only**. No API calls are made and no real
-> attendance is recorded. The API boundary is stubbed in `src/api/client.js` so
-> the screens can be wired to the Express backend later.
-
-## Screens
-
-### Student
-| Screen | What it does |
+| Role | Screens |
 | --- | --- |
-| **My QR** | Rotating attendance QR with a 30-second countdown ring, auto-refresh, and screen-brightness boost |
-| **Scan** | Camera scanner that simulates an event check-in and shows Present / Late / Duplicate results |
-| **History** | Attendance records with filters, status pills, and pull-to-refresh |
-| **Profile** | Student details, stats, settings, and logout |
+| **Student** | My QR (rotating personal code), Scan (self check-in), History, Profile |
+| **Organizer** | Events, Event QR (rotating display code), Scan (gatekeeper), Profile |
 
-### Organizer
-| Screen | What it does |
-| --- | --- |
-| **Events** | Assigned events with live counts, capacity progress, and filters |
-| **Scan** | Camera scanner → student verification sheet → confirm attendance |
-| **Profile** | Organizer details, stats, settings, and logout |
+## How data flows
+
+```text
+Phone (Expo Go) ──HTTP──> Express API :3000 ──> Supabase (Postgres + Auth)
+```
+
+Every screen reads and writes through `src/api/client.js`; no screen imports
+fixture data. Attendance created from this app is real: it appears immediately in
+the web dashboard, reports, and CSV export.
+
+### QR payloads
+
+| Code | Payload | Issued by | Scanned by |
+| --- | --- | --- | --- |
+| Student | `LQ-STU:<token>` | `POST /api/tokens/student` | Organizer **Scan** |
+| Event | `LQ-EVT:<eventId>:<token>` | `POST /api/tokens/display` | Student **Scan** |
+
+Tokens are stored and validated server-side and rotate every 30 seconds
+(`qr_window_seconds` per event for the event code). The scanners reject expired
+codes, duplicate check-ins, students outside the event audience, and events that
+are not live.
 
 ## Requirements
 
-- Node.js 20+ (LTS recommended)
+- Node.js 20+ and the backend running with `DATA_MODE=supabase`
 - The **Expo Go** app on your phone
   - [Android – Play Store](https://play.google.com/store/apps/details?id=host.exp.exponent)
   - [iOS – App Store](https://apps.apple.com/app/expo-go/id982107779)
-- Phone and computer on the **same Wi-Fi network**
+- A URL the phone can reach for the API (see [Connecting a phone](#connecting-a-phone))
 
 ## Run it
 
 ```bash
+# terminal 1
+cd backend
+npm run dev            # http://localhost:3000
+
+# terminal 2
 cd mobile
 npm install
 npx expo start
 ```
 
-Then:
+Then scan the terminal QR with Expo Go (Android) or the Camera app (iPhone).
 
-- **Android** — open Expo Go and scan the QR code in the terminal.
-- **iPhone** — open the Camera app, scan the QR code, and tap the Expo Go banner.
+### Sign in
 
-If the QR code cannot connect, use a tunnel:
+Two ways in:
+
+1. **School ID + birthdate** — the API derives the auth password from them
+   (`digits(schoolId) + YYYYMMDD`), so no email is needed.
+2. **Google** — tap *Continue with Google* and pick the Gmail account you signed up
+   with.
+
+| Role | School ID | Birthdate |
+| --- | --- | --- |
+| Student | `2023-0142` | `2003-04-12` |
+| Organizer | `2024-0345` | `2004-06-30` |
+
+Run `npm run seed` in `backend/` to print the full list.
+
+There is also an **Email** tab for accounts that already have a password (that is
+how you reach *Forgot password?*).
+
+Staff accounts cannot use the app: if an admin or superadmin signs in (for example
+by choosing their staff Gmail in *Continue with Google*), the app shows **Use the web
+dashboard** with a *Log out* button instead of opening a tab group.
+
+### Creating an account
+
+Both students and organizers can self-register. The login screen has two sign-up
+buttons, and the choice survives the Google redirect:
+
+1. **Sign up as student** or **Sign up as organizer** → choose a Gmail account
+   (*Continue with Google* on its own is the sign-in path for an existing account).
+2. **Complete your profile** — full name, school ID (`2023-0142`), birthdate, plus:
+   - student: program (SBIT / ARFIEN / SSLATE / SHTM) and year level;
+   - organizer: department (SBIT / ARFIEN / SSLATE / SHTM) only. The department is
+     a profile field — the venue fence is set by the admin on each event.
+   You can switch the role on the form if you pressed the wrong button.
+3. **Waiting for approval** — the account exists but is inactive until an admin
+   approves it on the web dashboard's *Approvals* page. *Check again* re-reads the
+   status, so there is no need to sign out.
+4. Once approved, the app opens on the student or organizer tabs.
+
+Staff accounts still cannot self-register; the admin creates them.
+
+### Forgot password
+
+*Forgot password?* on the Email tab → enter the account email → the API asks
+Supabase to mail a **6-digit code** → enter the code plus the new password. The
+reset signs you in immediately.
+
+The code arrives only if the Supabase project has custom SMTP configured and the
+*Reset password* template prints `{{ .Token }}`; see
+[`../supabase/README.md`](../supabase/README.md). The endpoint answers the same
+way whether or not the email has an account.
+
+## Connecting a phone
+
+`localhost` on a phone points at the phone itself, so the app needs a reachable
+API URL. Two options:
+
+### 1. Tunnel (works anywhere)
+
+Expose port 3000 with a Cloudflare quick tunnel:
 
 ```bash
-npx expo start --tunnel
+cloudflared tunnel --url http://localhost:3000
 ```
 
-### Demo login
+or ngrok:
 
-The login screen is prefilled with demo credentials. You can also skip straight
-in with either role button:
+```bash
+ngrok http 3000
+```
 
-- **Continue as Student** → Maria Santos (`2023-0142`)
-- **Continue as Organizer** → Rafael Dizon (`2024-0345`)
+Copy the `https://…` URL, open the app, tap **Server** under the sign-in fields,
+paste the URL, then **Save and test**. The screen shows `Connected · supabase mode
+· database ok` when it works. The URL is stored on the device.
+
+### 2. Same Wi-Fi (LAN IP)
+
+Start the API and use the computer's LAN IPv4 address, e.g.
+`http://192.168.1.10:3000`. Allow port 3000 through the firewall if Windows asks.
+Point the in-app **Server** field at it — `http://` is added automatically and
+`/api` is appended if missing.
+
+### Bake the URL in with an env file
+
+Copy `.env.example` to `.env`, set the values, then restart Metro:
+
+```bash
+EXPO_PUBLIC_API_URL=https://your-tunnel.trycloudflare.com
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…
+```
+
+```bash
+npx expo start --clear
+```
+
+`--clear` is required after changing `.env` because Metro caches public env vars.
+The in-app Server setting still overrides `EXPO_PUBLIC_API_URL` per device.
+
+The Supabase values power the Google button and use the **publishable (anon) key**,
+never the service-role key. Without them the app hides Google and falls back to
+school ID sign-in. The Google redirect URL `lacoqr://auth-callback` (and the
+`exp://…/--/auth-callback` URL of your Metro session) must be allow-listed in
+Supabase → Authentication → URL Configuration.
+
+> **Quick tunnels get a new URL every restart.** If the app suddenly cannot reach
+> the server, update the Server field (or `.env` + `--clear`).
+
+## Screens
+
+### Student
+
+- **My QR** — requests a personal token from the API and rotates it every 30
+  seconds. Brightness is raised while the tab is focused and restored on blur.
+- **Scan** — scans the organizer's event code and registers a self check-in.
+  A location fix is requested on the same tap; the API checks the venue fence.
+  Shows checked in / late / outside the venue / already checked in /
+  check-in closed / error. When the fix is missing, mocked, or imprecise the
+  check-in still succeeds and the sheet says it was saved unverified.
+- **History** — real attendance records from `GET /api/reports/me`, with filters
+  and pull-to-refresh.
+- **Profile** — live stats (attended, on-time %, late) plus account details.
+
+### Organizer
+
+- **Events** — events assigned to the organizer, with live tally, audience size,
+  and attendance progress.
+- **Event QR** — rotating display code for a live event.
+- **Scan** — gatekeeper mode: camera → student preview → confirm, with live
+  counts refreshed after each check-in.
+- **Profile** — assigned events, total scans, and turnout.
 
 ## Camera
 
-The Scan tabs use `expo-camera`. When prompted, allow camera access. If you
-denied it earlier, re-enable it in the phone's app settings or reinstall Expo Go.
+The Scan tabs use `expo-camera` and need a physical device — simulators have no
+camera. Grant camera access when prompted.
 
-No real QR code is needed for the prototype — use the **Simulate scan** button
-on either scanner to walk through the flow.
+Only one scanner is mounted per role, so there is never more than one active
+camera preview.
+
+## Location
+
+Student self check-in also uses `expo-location` (foreground only, installed with
+`npx expo install expo-location`). The permission is requested when a code is
+actually scanned, never on launch, and an 8-second cap keeps a slow GPS fix from
+hanging the scanner.
+
+- The app sends `latitude`, `longitude`, `accuracy` and `mocked` with the check-in.
+- Denied permission, location switched off, a timeout, or a mocked fix are all
+  non-fatal: the check-in is saved and flagged `location_unverified` server-side.
+- Permission strings live in `app.json` under the `expo-location` plugin. Inside
+  Expo Go you see Expo Go's own wording; the custom text applies to dev/prod builds.
+- Organizer scanning never asks for location.
 
 ## Project structure
 
@@ -74,26 +215,35 @@ on either scanner to walk through the flow.
 mobile/
 ├── src/
 │   ├── app/                     # Expo Router routes
-│   │   ├── _layout.jsx          # fonts, providers, stack
-│   │   ├── index.jsx            # login / role select
+│   │   ├── _layout.jsx          # fonts, providers, session bootstrap
+│   │   ├── index.jsx            # sign in (Google / school ID / email) + server URL
+│   │   ├── onboarding.jsx       # role-aware profile form for a new Google sign-up
+│   │   ├── pending.jsx          # waiting-for-approval / disabled screen
+│   │   ├── staff-only.jsx       # staff accounts are sent to the web dashboard
+│   │   ├── forgot-password.jsx  # emailed 6-digit code → new password
 │   │   ├── (student)/
-│   │   │   ├── _layout.jsx      # student tabs
+│   │   │   ├── _layout.jsx
 │   │   │   ├── qr.jsx
 │   │   │   ├── scan.jsx
 │   │   │   ├── history.jsx
 │   │   │   └── profile.jsx
 │   │   └── (organizer)/
-│   │       ├── _layout.jsx      # organizer tabs
+│   │       ├── _layout.jsx
 │   │       ├── events.jsx
+│   │       ├── code.jsx
 │   │       ├── scan.jsx
 │   │       └── profile.jsx
-│   ├── api/client.js            # mock API boundary → replace with fetch later
+│   ├── api/client.js            # HTTP boundary: session, tokens, scans, mappers
 │   ├── components/              # shared UI (Button, Card, StatusBadge, …)
-│   ├── context/AppContext.jsx   # demo session + live event counts
-│   ├── hooks/useTokenRotation.js
-│   ├── lib/format.js
-│   ├── mock/data.js             # all mock users, events, and records
-│   └── theme/tokens.js          # colors, spacing, typography, shadows
+│   ├── context/AppContext.jsx   # boot, sign in/out, account status, server URL
+│   ├── hooks/useQrToken.js      # API tokens + countdown + auto-rotation
+│   ├── lib/format.js            # dates, times, percentages
+│   ├── lib/location.js          # foreground fix with timeout, for the fence
+│   ├── lib/routes.js            # role → home route (student/organizer/staff)
+│   ├── lib/storage.js           # SecureStore on native, localStorage on web
+│   ├── lib/supabase.js          # PKCE client used only for the Google handshake
+│   └── theme/tokens.js          # colors, spacing, typography
+├── .env.example
 ├── app.json
 └── package.json
 ```
@@ -120,31 +270,16 @@ The palette and typography mirror the web dashboard:
 npm start          # start the Expo dev server
 npm run android    # open on a connected Android device/emulator
 npm run ios        # open on an iOS simulator (macOS only)
+npm run web        # open the web build (camera is unavailable)
 npm run lint       # eslint via expo lint
 ```
 
-## Wiring the real API later
-
-`src/api/client.js` contains one function per backend endpoint with the expected
-request shape:
-
-| Function | Endpoint |
-| --- | --- |
-| `login` | `POST /api/auth/login` |
-| `issueStudentToken` | `POST /api/tokens/student` |
-| `getEvents` | `GET /api/events` |
-| `getAttendanceHistory` | `GET /api/reports/attendance/me` |
-| `previewScan` | `POST /api/scan/preview` |
-| `confirmScan` | `POST /api/scan/confirm` |
-
-Replace each mock body with a `fetch` call and point `API_URL` at your Express
-server (use the computer's LAN IP, e.g. `http://192.168.1.10:3000`, not
-`localhost`, when testing on a physical phone).
-
 ## Notes
 
-- Routes live in `src/app/`; Expo Router picks that directory up automatically.
-- The prototype does not persist a session — reloading returns to login.
-- Screen brightness is raised only while **My QR** is focused and restored on
-  blur.
-- QR tokens are generated locally and are not valid against the real backend.
+- Sessions are stored with `expo-secure-store` on device and `localStorage` on
+  web, so reopening the app keeps you signed in until the token expires or you
+  log out.
+- The API is the source of truth for who may scan what: organizers only see
+  events they are assigned to, and students only see events for their program.
+- The web build (`npm run web`) is handy for checking layout, but use a phone
+  for camera testing.

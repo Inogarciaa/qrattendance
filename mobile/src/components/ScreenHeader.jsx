@@ -22,9 +22,9 @@ export function ScreenHeader({
       style={[
         styles.header,
         {
-          paddingTop: insets.top + 10,
+          paddingTop: insets.top + 8,
           backgroundColor: light ? colors.navy : colors.surface,
-          borderBottomColor: light ? "rgba(255,255,255,0.08)" : colors.border,
+          borderBottomColor: light ? "rgba(255,255,255,0.06)" : colors.border,
         },
       ]}
     >
@@ -68,7 +68,7 @@ export function ScreenHeader({
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
+    paddingBottom: 18,
     borderBottomWidth: 1,
   },
   topRow: {
@@ -87,21 +87,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontFamily: fonts.extrabold,
-    fontSize: 22,
+    fontFamily: fonts.bold,
+    fontSize: 21,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontFamily: fonts.medium,
-    fontSize: 12,
+    fontSize: 12.5,
     marginTop: 2,
   },
   back: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
 });

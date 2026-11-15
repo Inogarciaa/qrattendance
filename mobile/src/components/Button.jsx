@@ -42,7 +42,7 @@ const VARIANTS = {
   },
 };
 
-const HEIGHTS = { lg: 54, md: 46, sm: 38 };
+const HEIGHTS = { lg: 52, md: 44, sm: 36 };
 
 export function Button({
   label,
@@ -86,7 +86,7 @@ export function Button({
           <Text
             style={[
               styles.label,
-              { color: palette.label, fontSize: size === "sm" ? 13 : 15 },
+              { color: palette.label, fontSize: size === "sm" ? 12.5 : 14.5 },
               labelStyle,
             ]}
           >
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   base: {
     borderRadius: radius.md,
     borderWidth: 1,
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.semibold,
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
   pressed: {
     opacity: 0.86,

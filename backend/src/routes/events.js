@@ -2,6 +2,9 @@ const express = require("express");
 const { admin } = require("../lib/supabase");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { isLocalMode } = require("../lib/mode");
+const { isLiveWindow } = require("../lib/clock");
+const { parseGeoInput } = require("../lib/geo");
+const { hasGeofenceColumns } = require("../lib/schema");
 const localDb = require("../lib/local-db");
 
 const router = express.Router();
@@ -9,47 +12,139 @@ const router = express.Router();
 const EVENT_FIELDS =
   "id, name, description, venue, event_date, start_time, end_time, grace_minutes, scan_mode, status, qr_window_seconds, created_by, created_at";
 
-const LIST_SELECT = `${EVENT_FIELDS}, event_organizers(profile_id), event_audiences(program_id)`;
+/** Migration 0006 columns; only selected once the SQL has been applied. */
+const GEO_FIELDS = "latitude, longitude, geofence_radius_m";
+
+async function eventFields() {
+  return (await hasGeofenceColumns()) ? `${EVENT_FIELDS}, ${GEO_FIELDS}` : EVENT_FIELDS;
+}
+
+function programIdsOf(event) {
+  return (event.event_audiences || [])
+    .map((row) => row.program_id ?? row.program?.id)
+    .filter((id) => id !== null && id !== undefined);
+}
+
+async function attendanceTally(eventId) {
+  const { data, error } = await admin
+    .from("attendance")
+    .select("status")
+    .eq("event_id", eventId);
+  if (error) throw error;
+
+  const tally = { present: 0, late: 0, absent: 0 };
+  for (const row of data || []) tally[row.status] = (tally[row.status] || 0) + 1;
+  return tally;
+}
+
+async function audienceSize(programIds) {
+  let query = admin
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "student")
+    .eq("is_active", true);
+  if (programIds.length) query = query.in("program_id", programIds);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count || 0;
+}
+
+/**
+ * Adds the fields the mobile app needs to render an event card: live flag,
+ * attendance tally and the enrolled audience size.
+ */
+async function decorateWithCounts(events) {
+  const now = new Date();
+  return Promise.all(
+    events.map(async (event) => {
+      const programIds = programIdsOf(event);
+      const [tally, enrolled] = await Promise.all([
+        attendanceTally(event.id),
+        audienceSize(programIds),
+      ]);
+      return {
+        ...event,
+        live: isLiveWindow(event, now),
+        tally,
+        enrolled,
+      };
+    })
+  );
+}
+
+function decorateLocal(event) {
+  const now = new Date();
+  const programIds = (event.event_audiences || [])
+    .map((row) => row.program_id)
+    .filter((id) => id !== null && id !== undefined);
+  const students = localDb.listAccounts("student");
+  const enrolled = programIds.length
+    ? students.filter((student) => programIds.includes(student.program?.id)).length
+    : students.length;
+
+  return {
+    ...event,
+    live: isLiveWindow(event, now),
+    tally: { present: 0, late: 0, absent: 0 },
+    enrolled,
+  };
+}
 
 router.get("/", requireAuth, async (req, res) => {
-  if (isLocalMode) return res.json({ events: localDb.listEvents() });
+  const withCounts = String(req.query.with_counts || "") === "1";
 
-  let query = admin.from("events").select(LIST_SELECT).order("event_date", { ascending: false });
+  if (isLocalMode) {
+    const events = localDb.listEvents();
+    return res.json({ events: withCounts ? events.map(decorateLocal) : events });
+  }
+
+  let query = admin.from("events").select(`${await eventFields()}, event_organizers(profile_id), event_audiences(program_id)`).order("event_date", { ascending: false });
 
   if (req.user.role === "organizer") {
     query = admin
       .from("events")
-      .select(`${EVENT_FIELDS}, event_organizers!inner(profile_id), event_audiences(program_id)`)
+      .select(`${await eventFields()}, event_organizers!inner(profile_id), event_audiences(program_id)`)
       .eq("event_organizers.profile_id", req.user.id)
       .order("event_date", { ascending: false });
   } else if (req.user.role === "student") {
     query = admin
       .from("events")
-      .select(`${EVENT_FIELDS}, event_organizers(profile_id), event_audiences!inner(program_id)`)
+      .select(`${await eventFields()}, event_organizers(profile_id), event_audiences!inner(program_id)`)
       .eq("event_audiences.program_id", req.user.program_id)
       .order("event_date", { ascending: false });
   }
 
   const { data, error } = await query;
   if (error) throw error;
-  res.json({ events: data });
+
+  const events = withCounts ? await decorateWithCounts(data || []) : data;
+  res.json({ events });
 });
 
 router.get("/:id", requireAuth, async (req, res) => {
   if (isLocalMode) {
     const event = localDb.getEvent(req.params.id);
     if (!event) return res.status(404).json({ error: "Event not found" });
+
+    const programIds = (event.event_audiences || [])
+      .map((row) => row.program_id)
+      .filter((id) => id !== null && id !== undefined);
+    const students = localDb.listAccounts("student");
+    const enrolled = programIds.length
+      ? students.filter((student) => programIds.includes(student.program?.id)).length
+      : students.length;
+
     return res.json({
       event: { ...event, event_summaries: [] },
       tally: { present: 0, late: 0, absent: 0 },
-      enrolled: null,
+      enrolled,
     });
   }
 
   const { data, error } = await admin
     .from("events")
     .select(
-      `${EVENT_FIELDS}, event_organizers(profile:profiles(id, school_id, full_name)), event_audiences(program:programs(id, code, name)), event_summaries(*)`
+      `${await eventFields()}, event_organizers(profile:profiles(id, school_id, full_name)), event_audiences(program:programs(id, code, name)), event_summaries(*)`
     )
     .eq("id", req.params.id)
     .maybeSingle();
@@ -65,11 +160,21 @@ router.get("/:id", requireAuth, async (req, res) => {
   const tally = { present: 0, late: 0, absent: 0 };
   for (const row of counts || []) tally[row.status] = (tally[row.status] || 0) + 1;
 
-  const enrolled = (data.event_audiences || []).length === 0
-    ? (data.event_summaries?.[0]?.enrolled ?? null)
-    : null;
+  const programIds = (data.event_audiences || [])
+    .map((row) => row.program_id ?? row.program?.id)
+    .filter((id) => id !== null && id !== undefined);
 
-  res.json({ event: data, tally, enrolled });
+  let enrolledQuery = admin
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "student")
+    .eq("is_active", true);
+  if (programIds.length) enrolledQuery = enrolledQuery.in("program_id", programIds);
+
+  const { count: enrolledCount, error: enrolledError } = await enrolledQuery;
+  if (enrolledError) throw enrolledError;
+
+  res.json({ event: data, tally, enrolled: enrolledCount ?? 0 });
 });
 
 function eventPayload(body) {
@@ -118,12 +223,23 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "end_time must be after start_time" });
   }
 
+  const geo = parseGeoInput(body);
+  if (!geo.ok) return res.status(400).json({ error: geo.error });
+  Object.assign(payload, geo.payload);
+
   if (isLocalMode) {
     const event = localDb.createEvent(
       { ...payload, organizer_ids: body.organizer_ids, program_ids: body.program_ids },
       req.user.id
     );
     return res.status(201).json({ event });
+  }
+
+  if (Object.keys(geo.payload).length && !(await hasGeofenceColumns())) {
+    return res.status(503).json({
+      error: "Venue location is not enabled yet. Run supabase/migrations/0006_geofence.sql.",
+      code: "migration_required",
+    });
   }
 
   const { data: event, error } = await admin
@@ -146,6 +262,10 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "end_time must be after start_time" });
   }
 
+  const geo = parseGeoInput(body);
+  if (!geo.ok) return res.status(400).json({ error: geo.error });
+  Object.assign(payload, geo.payload);
+
   if (isLocalMode) {
     const event = localDb.updateEvent(req.params.id, {
       ...payload,
@@ -154,6 +274,13 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     });
     if (!event) return res.status(404).json({ error: "Event not found" });
     return res.json({ event });
+  }
+
+  if (Object.keys(geo.payload).length && !(await hasGeofenceColumns())) {
+    return res.status(503).json({
+      error: "Venue location is not enabled yet. Run supabase/migrations/0006_geofence.sql.",
+      code: "migration_required",
+    });
   }
 
   const { data: event, error } = await admin

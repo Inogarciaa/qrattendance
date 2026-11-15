@@ -3,6 +3,7 @@
     "name": "LacoQR",
     "slug": "lacoqr",
     "scheme": "lacoqr",
+    "owner": "tsmvipe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -34,6 +35,14 @@
         {
           "cameraPermission": "LacoQR uses your camera to scan event attendance QR codes.",
           "recordAudioAndroid": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "LacoQR checks that your phone is at the event venue when you check in."
         }
       ]
     ],
