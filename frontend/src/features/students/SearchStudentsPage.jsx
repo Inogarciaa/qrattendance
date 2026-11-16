@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import DataTable from "../../components/ui/DataTable";
 import Field from "../../components/ui/Field";
 import PageHeader from "../../components/ui/PageHeader";
+import Avatar from "../../components/ui/Avatar";
 import { fetchPrograms, fetchStudentAttendance, searchStudents } from "../../lib/api";
-import { initials } from "../../lib/format";
 
 function attendanceSummary(tally) {
   if (!tally) return "—";
@@ -137,7 +137,7 @@ export default function SearchStudentsPage() {
               columns={columns}
               rows={results.map((student) => [
                 <span className="who" key={student.id}>
-                  <span className="av sm">{initials(student.full_name)}</span>
+                  <Avatar name={student.full_name} photoUrl={student.photo_url} />
                   {student.full_name}
                 </span>,
                 student.school_id,

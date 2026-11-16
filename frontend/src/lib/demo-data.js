@@ -44,7 +44,7 @@ export const isLive = (event) => {
 };
 
 export const STUDENTS = [
-  ["2023-0142", "Maria Santos", "SBIT"],
+  ["2023-0142", "Ino Garcia", "SBIT"],
   ["2023-0157", "Jose Ramirez", "SBIT"],
   ["2024-0210", "Angela Cruz", "ARFIEN"],
   ["2024-0233", "Paolo Mendoza", "SHTM"],

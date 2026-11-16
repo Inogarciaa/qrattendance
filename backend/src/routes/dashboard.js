@@ -51,7 +51,7 @@ async function attendanceRows(eventId) {
   const { data, error } = await admin
     .from("attendance")
     .select(
-      "status, method, scanned_at, student:profiles!attendance_student_id_fkey(school_id, full_name, program:programs(code))"
+      "status, method, scanned_at, student:profiles!attendance_student_id_fkey(school_id, full_name, photo_url, program:programs(code))"
     )
     .eq("event_id", eventId)
     .order("scanned_at", { ascending: false });

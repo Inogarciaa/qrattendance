@@ -15,7 +15,7 @@ const PROGRAMS = [
 
 const PEOPLE = [
   ...staffAccounts(),
-  { school_id: "2023-0142", full_name: "Maria Santos", birthdate: "2003-04-12", role: "student", program_code: "SBIT", year_level: 3 },
+  { school_id: "2023-0142", full_name: "Ino Garcia", birthdate: "2003-04-12", role: "student", program_code: "SBIT", year_level: 3 },
   { school_id: "2023-0157", full_name: "Jose Ramirez", birthdate: "2003-08-02", role: "student", program_code: "SBIT", year_level: 3 },
   { school_id: "2024-0210", full_name: "Angela Cruz", birthdate: "2004-01-20", role: "student", program_code: "ARFIEN", year_level: 2 },
   { school_id: "2024-0233", full_name: "Paolo Mendoza", birthdate: "2004-03-09", role: "student", program_code: "SHTM", year_level: 2 },

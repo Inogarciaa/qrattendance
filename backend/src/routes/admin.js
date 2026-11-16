@@ -195,7 +195,7 @@ router.get("/approvals", async (req, res) => {
   const { data, error } = await admin
     .from("profiles")
     .select(
-      "id, school_id, full_name, email, role, year_level, created_at, program:programs(id, code, name)"
+      "id, school_id, full_name, email, role, year_level, photo_url, created_at, program:programs(id, code, name)"
     )
     .in("role", ["student", "organizer"])
     .is("approved_at", null)

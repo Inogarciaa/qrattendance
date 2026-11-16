@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "../components/ui/Icon";
+import Avatar from "../components/ui/Avatar";
 import CreateEventPage from "../features/events/CreateEventPage";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import ApprovalsPage from "../features/approvals/ApprovalsPage";
@@ -9,7 +10,6 @@ import ReportsPage from "../features/reports/ReportsPage";
 import SearchStudentsPage from "../features/students/SearchStudentsPage";
 import SettingsPage from "../features/settings/SettingsPage";
 import { clearSession, fetchMe, loadSession } from "../lib/api";
-import { initials } from "../lib/format";
 
 const MAIN_NAV = [
   { label: "Dashboard", icon: "grid" },
@@ -184,7 +184,7 @@ export default function App() {
             <Icon name="cht" />
           </button>
           <div className="me">
-            <span className="av">{initials(user.full_name)}</span>
+            <Avatar name={user.full_name} photoUrl={user.photo_url} size="md" />
             <div>
               <b>{user.full_name}</b>
               <small>{user.email}</small>

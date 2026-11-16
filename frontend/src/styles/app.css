@@ -20,6 +20,7 @@
 .me{display:flex;align-items:center;gap:10px;margin-left:4px;padding-left:12px;border-left:1px solid var(--br)}
 .av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px;flex:none;box-shadow:0 2px 8px rgba(37,99,235,.4)}
 .av.sm{width:28px;height:28px;font-size:11px}
+img.av{object-fit:cover;background:#e2e8f0;box-shadow:none}
 .me b{display:block;font-size:12px;line-height:1.2}.me small{color:var(--mu);font-size:11px}
 .content{flex:1;padding:36px 40px 56px;overflow-y:auto}
 .inner{width:100%;max-width:860px;margin:0 auto}

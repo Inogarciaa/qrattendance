@@ -8,7 +8,7 @@ const router = express.Router();
 
 const SELECT = `
   id, status, method, scanned_at,
-  student:profiles!attendance_student_id_fkey!inner(school_id, full_name, program:programs(id, code, name)),
+  student:profiles!attendance_student_id_fkey!inner(school_id, full_name, photo_url, program:programs(id, code, name)),
   event:events!inner(id, name, event_date, venue)
 `;
 

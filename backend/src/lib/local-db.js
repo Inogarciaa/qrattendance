@@ -35,7 +35,7 @@ const PEOPLE = [
   },
   {
     school_id: "2023-0142",
-    full_name: "Maria Santos",
+    full_name: "Ino Garcia",
     email: "student1@lacoqr.local",
     role: "student",
     password: DEFAULT_STAFF_PASSWORD,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Field from "../../components/ui/Field";
 import Icon from "../../components/ui/Icon";
 import StatusBadge from "../../components/ui/StatusBadge";
+import Avatar from "../../components/ui/Avatar";
 import {
   fetchEvent,
   fetchEvents,
@@ -9,7 +10,7 @@ import {
   fetchReports,
   updateEvent,
 } from "../../lib/api";
-import { formatTime, initials, toMinutes } from "../../lib/format";
+import { formatTime, toMinutes } from "../../lib/format";
 import LocationPicker from "../events/LocationPicker";
 
 const REFRESH_MS = 20000;
@@ -315,7 +316,10 @@ export default function DashboardPage({ onNavigate }) {
               )}
               {live.recent_scans.map((entry, index) => (
                 <div className="scan-item" key={`${entry.student?.school_id || index}-${index}`}>
-                  <span className="av sm">{initials(entry.student?.full_name)}</span>
+                  <Avatar
+                    name={entry.student?.full_name}
+                    photoUrl={entry.student?.photo_url}
+                  />
                   <div style={{ flex: 1 }}>
                     <div className="scan-name">{entry.student?.full_name || "Unknown student"}</div>
                     <div className="scan-prog">{entry.student?.program?.code || "—"}</div>
@@ -512,9 +516,10 @@ export default function DashboardPage({ onNavigate }) {
                       <tr key={record.id || index}>
                         <td>
                           <div className="who">
-                            <span className="av sm">
-                              {initials(record.student?.full_name)}
-                            </span>
+                            <Avatar
+                              name={record.student?.full_name}
+                              photoUrl={record.student?.photo_url}
+                            />
                             {record.student?.full_name || "Unknown student"}
                           </div>
                         </td>

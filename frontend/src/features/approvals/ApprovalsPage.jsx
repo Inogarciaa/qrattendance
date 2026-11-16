@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "../../components/ui/PageHeader";
+import Avatar from "../../components/ui/Avatar";
 import { fetchApprovals, fetchPrograms, setAccountApproval } from "../../lib/api";
-import { initials } from "../../lib/format";
 
 const ROLES = [
   { value: "student", label: "Student" },
@@ -204,7 +204,7 @@ export default function ApprovalsPage() {
                     <tr key={row.id}>
                       <td>
                         <div className="who">
-                          <span className="av sm">{initials(row.full_name)}</span>
+                          <Avatar name={row.full_name} photoUrl={row.photo_url} />
                           <div>
                             <div>{row.full_name}</div>
                             <small style={{ color: "var(--mu)" }}>{row.email || "—"}</small>
