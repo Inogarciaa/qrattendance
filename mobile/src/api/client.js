@@ -449,6 +449,20 @@ export async function resetPassword({ email, code, password }) {
   return data;
 }
 
+/** Uploads a profile photo as a base64 data URL and returns its public URL. */
+export async function uploadPhoto({ base64, mimeType = "image/jpeg" }) {
+  const data = await request("/auth/photo", {
+    method: "POST",
+    body: { image: `data:${mimeType};base64,${base64}` },
+  });
+  return data?.photo_url || null;
+}
+
+export async function removePhoto() {
+  await request("/auth/photo", { method: "DELETE" });
+  return null;
+}
+
 export async function login({ schoolId, birthdate }) {
   const data = await request("/auth/login", {
     method: "POST",

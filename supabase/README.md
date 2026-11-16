@@ -13,11 +13,12 @@ This folder defines the database only; the API in `backend/` talks to it.
 | `migrations/0004_profiles_email.sql` | `profiles.email` + unique index (email search) |
 | `migrations/0005_signup_approval.sql` | `profiles.approved_at` for the Google sign-up approval queue |
 | `migrations/0006_geofence.sql` | venue coordinates on `events`, location evidence on `attendance` |
+| `migrations/0007_avatars.sql` | public `avatars` storage bucket for optional profile photos |
 | `seed.sql` | default programs (SBIT, ARFIEN, SSLATE, SHTM) |
-| `apply_all.sql` | all six migrations + `seed.sql` in one paste-and-run script |
+| `apply_all.sql` | all seven migrations + `seed.sql` in one paste-and-run script |
 
-Apply in order (`0001` → `0002` → `0003` → `0004` → `0005` → `0006` → `seed.sql`) in the
-Supabase SQL editor, or via the Supabase CLI:
+Apply in order (`0001` → `0002` → `0003` → `0004` → `0005` → `0006` → `0007` → `seed.sql`)
+in the Supabase SQL editor, or via the Supabase CLI:
 
 ```bash
 supabase db push
@@ -26,7 +27,7 @@ supabase db push
 `apply_all.sql` is the fastest path for a fresh project: open the SQL editor, paste the
 whole file, run it once. All statements are idempotent, so re-running is safe.
 
-> **Next migration:** `0007_alignment.sql` is planned. It should add token hashing,
+> **Next migration:** `0008_alignment.sql` is planned. It should add token hashing,
 > year-level audiences, `report_exports`, and `audit_logs`. See `docs/DATA_MODEL.md`.
 
 Restart the API after applying a migration that adds a column (`0004`, `0005`, `0006`).
@@ -81,7 +82,7 @@ One row per account; extends `auth.users`.
 | program_id | int | FK → programs |
 | year_level | int | |
 | birthdate | date | part of the login password |
-| photo_url | text | for gatekeeper verification |
+| photo_url | text | optional profile photo; public URL in the `avatars` bucket (`0007`) |
 | is_active | boolean | default true |
 | approved_at | timestamptz | null while a self-signup waits for an admin (`0005`) |
 | created_at | timestamptz | |
@@ -148,6 +149,21 @@ location outcomes: `out_of_area` (rejected) and `location_unverified` (accepted,
 
 ### `event_summaries`
 Aggregated totals per event, written when an event is closed.
+
+## Storage
+
+`0007_avatars.sql` creates one public bucket:
+
+| Bucket | Public | Contents |
+| --- | --- | --- |
+| `avatars` | yes | `<user id>/avatar.{jpg,png,webp}` — optional profile photos |
+
+The bucket is public only for reads, so a plain URL renders in the mobile app and the web
+dashboard. There is no insert/update/delete policy: uploads and deletions go through
+`POST`/`DELETE /auth/photo` in the API, which uses the service role. The API removes the
+old file when the extension changes and appends `?v=<timestamp>` to the stored URL so the
+new picture appears immediately. Removing a photo deletes the object and nulls
+`profiles.photo_url`, which falls back to the initials avatar.
 
 ## Relationships
 

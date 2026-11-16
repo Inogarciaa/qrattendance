@@ -98,6 +98,14 @@ buttons, and the choice survives the Google redirect:
 
 Staff accounts still cannot self-register; the admin creates them.
 
+### Profile photo (optional)
+
+On the **Profile** tab, tap your avatar and pick **Take a photo** or **Choose from
+library** (square crop, compressed). The image is uploaded to the public Supabase
+`avatars` bucket and shown wherever your avatar appears - the profile header, the
+student QR screen and the gatekeeper's verification sheet. **Remove photo**
+returns to the initials avatar. Nothing breaks if you skip it.
+
 ### Forgot password
 
 *Forgot password?* on the Email tab → enter the account email → the API asks

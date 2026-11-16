@@ -142,6 +142,7 @@ export default function OrganizerScanScreen() {
         schoolId: preview.student.school_id,
         program: preview.student.program?.code || "",
         yearLevel: preview.student.year_level,
+        photoUrl: preview.student.photo_url || null,
         status: preview.predicted_status,
         duplicate: preview.already_checked_in,
         time: preview.existing?.scanned_at
@@ -426,7 +427,7 @@ function VerifySheet({ candidate, phase, event, onCancel, onConfirm, onNext }) {
           ) : (
             <>
               <View style={styles.studentRow}>
-                <Avatar name={candidate?.name} size={52} />
+                <Avatar name={candidate?.name} uri={candidate?.photoUrl} size={52} />
                 <View style={styles.studentText}>
                   <Text style={styles.studentName}>{candidate?.name || "Reading…"}</Text>
                   <Text style={styles.studentMeta}>

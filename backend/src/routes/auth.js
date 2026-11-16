@@ -3,13 +3,18 @@ const { createClient } = require("@supabase/supabase-js");
 
 const { admin, anon, url, anonKey } = require("../lib/supabase");
 const { toEmail, buildPassword } = require("../lib/password");
-const { requireAccount } = require("../middleware/auth");
+const { requireAccount, requireAuth } = require("../middleware/auth");
 const { isLocalMode } = require("../lib/mode");
 const { signToken } = require("../lib/auth-token");
 const { loginWithPassword } = require("../lib/local-db");
 const { hasApprovalColumn } = require("../lib/schema");
 
 const router = express.Router();
+
+// Profile photos are optional; keep them small and in web-safe formats.
+const PHOTO_BUCKET = "avatars";
+const PHOTO_EXTENSIONS = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp" };
+const PHOTO_MAX_BYTES = 3 * 1024 * 1024;
 
 const PROFILE_SELECT =
   "id, school_id, full_name, role, program_id, year_level, photo_url, is_active, email, program:programs(id, code, name)";
@@ -361,6 +366,114 @@ router.post("/reset-password", async (req, res) => {
     refresh_token: data.session.refresh_token,
     expires_at: data.session.expires_at,
   });
+});
+
+/* -------------------------------------------------------------------- photo */
+
+const PHOTO_OBJECTS = (userId) =>
+  ["jpg", "png", "webp"].map((ext) => `${userId}/avatar.${ext}`);
+
+function photoUrlFor(path) {
+  const { data } = admin.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+/**
+ * Stores an optional profile photo sent as a base64 data URL, then points
+ * profiles.photo_url at it. Re-uploading replaces the previous file.
+ */
+router.post("/photo", requireAuth, async (req, res) => {
+  if (isLocalMode) {
+    return res.status(501).json({ error: "Profile photos need Supabase mode" });
+  }
+
+  const image = String(req.body?.image || "");
+  const match = image.match(/^data:(image\/[a-z+.-]+);base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!match) {
+    return res.status(400).json({
+      error: "Send the photo as a base64 data URL",
+      code: "invalid_photo",
+    });
+  }
+
+  const mime = match[1].toLowerCase();
+  const extension = PHOTO_EXTENSIONS[mime];
+  if (!extension) {
+    return res.status(400).json({
+      error: "Use a JPEG, PNG or WebP photo",
+      code: "invalid_photo_type",
+    });
+  }
+
+  const buffer = Buffer.from(match[2], "base64");
+  if (!buffer.length) {
+    return res.status(400).json({ error: "That photo is empty", code: "invalid_photo" });
+  }
+  if (buffer.length > PHOTO_MAX_BYTES) {
+    return res.status(413).json({
+      error: "That photo is too large. Use one under 3 MB.",
+      code: "photo_too_large",
+    });
+  }
+
+  const userId = req.authUser.id;
+  const path = `${userId}/avatar.${extension}`;
+
+  // Clear other extensions so an old PNG cannot outlive a new JPEG.
+  await admin.storage
+    .from(PHOTO_BUCKET)
+    .remove(PHOTO_OBJECTS(userId).filter((key) => key !== path));
+
+  const { error: uploadError } = await admin.storage
+    .from(PHOTO_BUCKET)
+    .upload(path, buffer, { contentType: mime, upsert: true, cacheControl: "3600" });
+
+  if (uploadError) {
+    if (/bucket/i.test(uploadError.message || "")) {
+      return res.status(503).json({
+        error: "Profile photos are not set up yet. Run migration 0007_avatars.sql.",
+        code: "migration_required",
+      });
+    }
+    throw uploadError;
+  }
+
+  const baseUrl = photoUrlFor(path);
+  if (!baseUrl) {
+    return res.status(502).json({ error: "Could not build the photo URL" });
+  }
+
+  // The cache-busting query makes the new file show up immediately.
+  const photoUrl = `${baseUrl}?v=${Date.now()}`;
+  const { error: updateError } = await admin
+    .from("profiles")
+    .update({ photo_url: photoUrl })
+    .eq("id", userId);
+  if (updateError) throw updateError;
+
+  return res.json({ photo_url: photoUrl });
+});
+
+/** Removes the stored file and falls back to the initials avatar. */
+router.delete("/photo", requireAuth, async (req, res) => {
+  if (isLocalMode) {
+    return res.status(501).json({ error: "Profile photos need Supabase mode" });
+  }
+
+  const userId = req.authUser.id;
+  const { error: removeError } = await admin
+    .storage
+    .from(PHOTO_BUCKET)
+    .remove(PHOTO_OBJECTS(userId));
+  if (removeError) throw removeError;
+
+  const { error: updateError } = await admin
+    .from("profiles")
+    .update({ photo_url: null })
+    .eq("id", userId);
+  if (updateError) throw updateError;
+
+  return res.json({ photo_url: null });
 });
 
 module.exports = router;

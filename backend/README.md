@@ -182,6 +182,11 @@ Base path: `/api`. All routes except `/auth/*` require `Authorization: Bearer <a
 | POST | `/auth/onboarding` | Google session without a profile | body `{ role, school_id, full_name, birthdate, program_code, year_level? }` → creates a **pending** profile. `role` is `student` or `organizer` (staff roles are refused); organizers skip `year_level` and store their department in `program_id` |
 | POST | `/auth/forgot-password` | public | body `{ email }` → emails a 6-digit recovery code (always answers `{ ok: true }`) |
 | POST | `/auth/reset-password` | public | body `{ email, code, password }` → verifies the code, sets the password, returns a ready session |
+| POST | `/auth/photo` | approved account | body `{ image: "data:image/jpeg;base64,..." }` (≤ 3 MB) → stores it in the public `avatars` bucket and returns `{ photo_url }` |
+| DELETE | `/auth/photo` | approved account | removes the stored file and clears `photo_url` |
+
+Profile photos are optional. The bucket is public so the URL renders anywhere;
+uploads always go through this endpoint with the service role.
 
 Login answers with `403` and a `code` when the account cannot be used yet:
 `profile_missing`, `pending_approval`, or `account_disabled`. The mobile app uses

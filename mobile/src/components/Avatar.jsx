@@ -1,8 +1,12 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Image, StyleSheet, Text, View } from "react-native";
 
 import { colors, fonts } from "../theme/tokens";
 
-export function Avatar({ name = "", size = 44, tone = "light", style }) {
+export function Avatar({ name = "", uri = null, size = 44, tone = "light", style }) {
+  // Remember which URL failed; a new upload gets a new URL and another chance.
+  const [brokenUri, setBrokenUri] = useState(null);
+
   const label = name
     .split(" ")
     .filter(Boolean)
@@ -11,6 +15,7 @@ export function Avatar({ name = "", size = 44, tone = "light", style }) {
     .join("");
 
   const dark = tone === "dark";
+  const showPhoto = Boolean(uri) && brokenUri !== uri;
 
   return (
     <View
@@ -26,17 +31,26 @@ export function Avatar({ name = "", size = 44, tone = "light", style }) {
         style,
       ]}
     >
-      <Text
-        style={[
-          styles.text,
-          {
-            color: dark ? colors.white : colors.brandDark,
-            fontSize: size * 0.34,
-          },
-        ]}
-      >
-        {label || "?"}
-      </Text>
+      {showPhoto ? (
+        <Image
+          source={{ uri }}
+          style={{ width: size, height: size, borderRadius: size / 2 }}
+          onError={() => setBrokenUri(uri)}
+          accessibilityIgnoresInvertColors
+        />
+      ) : (
+        <Text
+          style={[
+            styles.text,
+            {
+              color: dark ? colors.white : colors.brandDark,
+              fontSize: size * 0.34,
+            },
+          ]}
+        >
+          {label || "?"}
+        </Text>
+      )}
     </View>
   );
 }
@@ -46,6 +60,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+    overflow: "hidden",
   },
   text: {
     fontFamily: fonts.bold,

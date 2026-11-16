@@ -104,7 +104,7 @@ export default function StudentQrScreen() {
             {user?.yearLevel ? ` · Year ${user.yearLevel}` : ""}
           </Text>
         </View>
-        <Avatar name={user?.name} size={44} tone="dark" />
+        <Avatar name={user?.name} uri={user?.photoUrl} size={44} tone="dark" />
       </View>
 
       <ScrollView

@@ -40,6 +40,13 @@
       "expo-secure-store",
       "expo-web-browser",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "LacoQR uses your photo library so you can add a profile picture.",
+          "cameraPermission": "LacoQR uses your camera so you can take a profile picture."
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "LacoQR checks that your phone is at the event venue when you check in."

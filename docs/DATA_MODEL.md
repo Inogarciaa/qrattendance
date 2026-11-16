@@ -271,7 +271,7 @@ the campus profile.
 | `program_id` | `integer` | FK `programs(id)`, nullable | Null for admins/superadmins; for organizers this is the **department they chose** at sign-up (SBIT / ARFIEN / SSLATE / SHTM). It does not drive geofencing or event assignment. |
 | `year_level` | `integer` | nullable | Students only. Organizers leave it null. |
 | `birthdate` | `date` | nullable | Used by the prototype login derivation. Treat as private. |
-| `photo_url` | `text` | nullable | Student photo for gatekeeper verification. |
+| `photo_url` | `text` | nullable | Optional profile photo (`0007`): the public URL of `<id>/avatar.<ext>` in the `avatars` storage bucket. `NULL` falls back to the initials avatar. |
 | `is_active` | `boolean` | not null, default `true` | Soft-disable an account. |
 | `approved_at` | `timestamptz` | nullable | `NULL` plus `is_active = false` means "self sign-up waiting for an admin"; stamping it approves the account (`0005`). |
 | `last_login_at` | `timestamptz` | nullable | **Proposed**; useful for account auditing. |
@@ -281,6 +281,14 @@ the campus profile.
 **Not stored here:** `email` and `password_hash`. Supabase Auth stores credentials
 in `auth.users`. The synthetic email is derived by the API
 (`digits(school_id)@AUTH_EMAIL_DOMAIN`).
+
+**Profile photos live in Storage, not in Postgres.** `0007_avatars.sql` creates a
+**public** `avatars` bucket and only a read policy; there is no client write policy.
+The API's `POST /auth/photo` uploads the image with the service role to
+`<profile id>/avatar.{jpg,png,webp}`, deletes the same user's file with another
+extension, and stores the public URL (plus `?v=<timestamp>`) in `photo_url`.
+`DELETE /auth/photo` removes the object and nulls the column. Because the bucket is
+public, the URL renders in the mobile app and the web dashboard without signing.
 
 ### 5.3 `events` — Implemented, with proposed field
 
