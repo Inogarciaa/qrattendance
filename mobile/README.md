@@ -26,10 +26,12 @@ the web dashboard, reports, and CSV export.
 | Student | `LQ-STU:<token>` | `POST /api/tokens/student` | Organizer **Scan** |
 | Event | `LQ-EVT:<eventId>:<token>` | `POST /api/tokens/display` | Student **Scan** |
 
-Tokens are stored and validated server-side and rotate every 30 seconds
-(`qr_window_seconds` per event for the event code). The scanners reject expired
-codes, duplicate check-ins, students outside the event audience, and events that
-are not live.
+Tokens are stored and validated server-side and expire after 30 seconds
+(`qr_window_seconds` per event for the event code). The projected event code
+refreshes itself; the student's personal code is not refreshed automatically -
+once it expires the screen asks them to tap **Generate again**. The scanners
+reject expired codes, duplicate check-ins, students outside the event audience,
+and events that are not live.
 
 ## Requirements
 
@@ -177,8 +179,10 @@ Supabase → Authentication → URL Configuration.
 
 ### Student
 
-- **My QR** — requests a personal token from the API and rotates it every 30
-  seconds. Brightness is raised while the tab is focused and restored on blur.
+- **My QR** — requests a personal token when opened. It expires after 30
+  seconds and the QR is replaced by a **Generate again** button, so nothing is
+  refreshed behind the student's back. Brightness is raised while a code is
+  showing and restored afterwards.
 - **Scan** — scans the organizer's event code and registers a self check-in.
   A location fix is requested on the same tap; the API checks the venue fence.
   Shows checked in / late / outside the venue / already checked in /
@@ -246,7 +250,7 @@ mobile/
 │   ├── api/client.js            # HTTP boundary: session, tokens, scans, mappers
 │   ├── components/              # shared UI (Button, Card, StatusBadge, …)
 │   ├── context/AppContext.jsx   # boot, sign in/out, account status, server URL
-│   ├── hooks/useQrToken.js      # API tokens + countdown + auto-rotation
+│   ├── hooks/useQrToken.js      # API tokens + countdown (auto or manual rotation)
 │   ├── lib/format.js            # dates, times, percentages
 │   ├── lib/location.js          # foreground fix with timeout, for the fence
 │   ├── lib/routes.js            # role → home route (student/organizer/staff)

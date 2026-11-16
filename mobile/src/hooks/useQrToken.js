@@ -6,8 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * `issue` is an async function returning the API payload
  * `{ token, expires_at, window_seconds }`. With `auto` enabled the hook rotates
  * the code as soon as the server-side window lapses, which is what the event
- * display needs; the student QR can also rotate automatically so the code an
- * organizer scans is never stale.
+ * display needs. Pass `auto: false` when the screen should wait for the user to
+ * request another code, like the student's personal QR.
  */
 export function useQrToken({ issue, auto = true } = {}) {
   const [token, setToken] = useState(null);

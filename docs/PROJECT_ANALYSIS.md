@@ -96,7 +96,7 @@ temporary password or one-time code and force a password change on first login.
 
 | ID | Requirement |
 | --- | --- |
-| STU-01 | Student sees a personal QR code that refreshes automatically before its 30-second expiry. |
+| STU-01 | Student sees a personal QR code that expires after 30 seconds; it is not refreshed automatically, so the student taps **Generate again** to show a new one. |
 | STU-02 | Student can open a camera scanner to scan an event display QR. |
 | STU-03 | Self-service check-in succeeds only when the event is live, uses self-service/dual mode, the student is in the audience, the token is fresh and unused, and no attendance record exists yet. |
 | STU-04 | Student can view personal attendance history and status. |
@@ -144,7 +144,8 @@ temporary password or one-time code and force a password change on first login.
    closed.
 3. **Token lifetime** — student/display tokens expire after 30 seconds by
    default. The server clock is authoritative; expired tokens are always
-   rejected.
+   rejected. The event display refreshes itself; the student regenerates the
+   personal code on demand.
 4. **One active token per subject** — issuing a new student or event token
    replaces the previous one so old QR images stop working immediately.
 5. **Token subject must match the operation** — a student token cannot be used as
@@ -174,7 +175,7 @@ temporary password or one-time code and force a password change on first login.
 | --- | --- |
 | Verification speed | Under 3 seconds per gatekeeper scan (preview + confirm). |
 | Token security | 0% acceptance of expired tokens during security testing. |
-| QR rotation | 30 seconds, configurable per event; refresh client-side before expiry. |
+| QR rotation | 30 seconds, configurable per event. The event display refreshes itself; the student taps Generate again after expiry. |
 | Real-time updates | Live dashboard reflects new check-ins within ~2 seconds. |
 | Availability | Requires an internet connection; document offline behavior as a limitation. |
 | Security | Supabase Auth, server-side authorization, RLS, HTTPS, least-privilege service key usage, hashed/opaque tokens. |

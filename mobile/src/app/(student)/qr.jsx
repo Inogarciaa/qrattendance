@@ -27,14 +27,20 @@ export default function StudentQrScreen() {
   const [eventsError, setEventsError] = useState("");
 
   const { token, secondsLeft, expired, windowSeconds, progress, loading, error, generate } =
-    useQrToken({ issue: issueStudentToken });
+    useQrToken({ issue: issueStudentToken, auto: false });
   const previousBrightness = useRef(null);
+  const startedRef = useRef(false);
   const hasCode = Boolean(token);
 
-  // A fresh code every time the student opens this tab.
+  // A fresh code the first time the student opens this tab. Once it expires the
+  // screen stays on "Generate again" until the student taps it - even after
+  // switching tabs and coming back.
   useFocusEffect(
     useCallback(() => {
-      generate();
+      if (!startedRef.current) {
+        startedRef.current = true;
+        generate();
+      }
 
       let active = true;
       getEvents()
@@ -127,7 +133,9 @@ export default function StudentQrScreen() {
               <View style={styles.timerRow}>
                 <CountdownRing progress={progress} seconds={secondsLeft} />
                 <Text style={styles.timerTitle}>
-                  {secondsLeft <= 5 ? "Refreshing code…" : `New code in ${secondsLeft}s`}
+                  {secondsLeft <= 5
+                    ? `Code expires in ${secondsLeft}s`
+                    : `Expires in ${secondsLeft}s`}
                 </Text>
                 <Pressable
                   onPress={generate}
@@ -153,7 +161,7 @@ export default function StudentQrScreen() {
                     : `Codes are valid for ${windowSeconds} seconds.`}
               </Text>
               <Button
-                label={loading ? "Generating…" : expired ? "Generate new QR" : "Generate QR"}
+                label={loading ? "Generating…" : expired ? "Generate again" : "Generate QR"}
                 onPress={generate}
                 loading={loading}
                 style={styles.generatorButton}
