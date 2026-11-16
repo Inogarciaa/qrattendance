@@ -147,6 +147,11 @@ export default function StudentQrScreen() {
                   <Ionicons name="refresh" size={18} color={colors.brand} />
                 </Pressable>
               </View>
+
+              <Text style={styles.hint}>
+                This is your personal code. The scanner records the event the organizer
+                selected.
+              </Text>
             </>
           ) : (
             <View style={styles.generator}>
@@ -282,6 +287,16 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 13,
     color: colors.text,
+  },
+  hint: {
+    alignSelf: "stretch",
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    lineHeight: 17,
+    color: colors.muted,
+    textAlign: "center",
+    marginTop: 14,
+    paddingHorizontal: 8,
   },
   refresh: {
     width: 38,

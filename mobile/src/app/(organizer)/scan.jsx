@@ -417,6 +417,9 @@ function VerifySheet({ candidate, phase, event, onCancel, onConfirm, onNext }) {
                 <StatusBadge status={candidate?.status} />
               </View>
               {candidate?.time ? <Text style={styles.resultTime}>Checked in at {candidate.time}</Text> : null}
+              <Text style={styles.resultEvent}>
+                {event.title} · {event.venue}
+              </Text>
               <View style={styles.countsCard}>
                 <DotStat value={event.present} label="present" color={colors.green} />
                 <DotStat value={event.late} label="late" color={colors.amber} />
@@ -836,6 +839,13 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: "center",
     marginBottom: 16,
+  },
+  resultEvent: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: 8,
   },
   countsCard: {
     flexDirection: "row",
