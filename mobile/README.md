@@ -84,10 +84,12 @@ buttons, and the choice survives the Google redirect:
 
 1. **Sign up as student** or **Sign up as organizer** → choose a Gmail account
    (*Continue with Google* on its own is the sign-in path for an existing account).
-2. **Complete your profile** — full name, school ID (`2023-0142`), birthdate, plus:
+2. **Complete your profile** - full name, school ID (`2023-0142`, eight digits; the
+   dash is inserted for you), birthdate (tap the field and pick from a calendar -
+   only ages 10-100 are selectable), plus:
    - student: program (SBIT / ARFIEN / SSLATE / SHTM) and year level;
    - organizer: department (SBIT / ARFIEN / SSLATE / SHTM) only. The department is
-     a profile field — the venue fence is set by the admin on each event.
+     a profile field - the venue fence is set by the admin on each event.
    You can switch the role on the form if you pressed the wrong button.
 3. **Waiting for approval** — the account exists but is inactive until an admin
    approves it on the web dashboard's *Approvals* page. *Check again* re-reads the

@@ -17,15 +17,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { clearIntendedRole, fetchHealth, setIntendedRole } from "../api/client";
 import { Button } from "../components/Button";
+import { DateField } from "../components/DateField";
 import { LogoMark } from "../components/LogoMark";
 import { useApp } from "../context/AppContext";
+import { birthdateError, maskSchoolId, schoolIdError } from "../lib/inputMasks";
 import { homeRouteFor } from "../lib/routes";
 import { supabaseConfigured } from "../lib/supabase";
 import { colors, fonts, radius, spacing } from "../theme/tokens";
-
-function digits(value) {
-  return String(value || "").replace(/\D/g, "");
-}
 
 export default function LoginScreen() {
   const {
@@ -67,9 +65,17 @@ export default function LoginScreen() {
         setError("Enter your email and password.");
         return;
       }
-    } else if (!digits(schoolId) || !birthdate.trim()) {
-      setError("Enter your school ID and birthdate.");
-      return;
+    } else {
+      const idProblem = schoolId ? schoolIdError(schoolId) : "Enter your school ID.";
+      if (idProblem) {
+        setError(idProblem);
+        return;
+      }
+      const dateProblem = birthdate ? birthdateError(birthdate) : "Enter your birthdate.";
+      if (dateProblem) {
+        setError(dateProblem);
+        return;
+      }
     }
 
     setPending(true);
@@ -188,34 +194,30 @@ export default function LoginScreen() {
                   <Ionicons name="id-card-outline" size={18} color={colors.muted} />
                   <TextInput
                     value={schoolId}
-                    onChangeText={setSchoolId}
+                    onChangeText={(value) => {
+                      setSchoolId(maskSchoolId(value));
+                      setError("");
+                    }}
                     placeholder="2023-0142"
                     placeholderTextColor="#9ca3af"
-                    autoCapitalize="characters"
+                    autoCapitalize="none"
                     autoCorrect={false}
                     autoComplete="off"
+                    keyboardType="number-pad"
+                    maxLength={9}
                     returnKeyType="next"
                     style={styles.input}
                   />
                 </View>
 
                 <Text style={styles.label}>Birthdate</Text>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="calendar-outline" size={18} color={colors.muted} />
-                  <TextInput
-                    value={birthdate}
-                    onChangeText={setBirthdate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#9ca3af"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="off"
-                    keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
-                    returnKeyType="go"
-                    onSubmitEditing={handleSignIn}
-                    style={styles.input}
-                  />
-                </View>
+                <DateField
+                  value={birthdate}
+                  onChange={(value) => {
+                    setBirthdate(value);
+                    setError("");
+                  }}
+                />
               </>
             ) : (
               <>

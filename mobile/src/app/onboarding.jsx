@@ -15,7 +15,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { clearIntendedRole, getIntendedRole } from "../api/client";
 import { Button } from "../components/Button";
+import { DateField } from "../components/DateField";
 import { useApp } from "../context/AppContext";
+import { birthdateError, maskSchoolId, schoolIdError } from "../lib/inputMasks";
 import { colors, fonts, radius, spacing } from "../theme/tokens";
 
 // These four are both the degree programs and the organizer departments.
@@ -78,19 +80,30 @@ export default function OnboardingScreen() {
   const submit = async () => {
     if (busy) return;
 
-    const complete =
-      schoolId.trim() &&
-      fullName.trim() &&
-      department &&
-      birthdate.trim() &&
-      (isOrganizer || yearLevel);
+    if (!fullName.trim()) {
+      setError("Enter your full name.");
+      return;
+    }
 
-    if (!complete) {
-      setError(
-        isOrganizer
-          ? "Fill in every field so an administrator can review your account."
-          : "Fill in every field so we can match you to your record."
-      );
+    const idProblem = schoolIdError(schoolId);
+    if (idProblem) {
+      setError(idProblem);
+      return;
+    }
+
+    if (!department) {
+      setError(isOrganizer ? "Choose your department." : "Choose your program.");
+      return;
+    }
+
+    if (!isOrganizer && !yearLevel) {
+      setError("Choose your year level.");
+      return;
+    }
+
+    const dateProblem = birthdateError(birthdate);
+    if (dateProblem) {
+      setError(dateProblem);
       return;
     }
 
@@ -192,14 +205,20 @@ export default function OnboardingScreen() {
             <Ionicons name="id-card-outline" size={18} color={colors.muted} />
             <TextInput
               value={schoolId}
-              onChangeText={setSchoolId}
+              onChangeText={(value) => {
+                setSchoolId(maskSchoolId(value));
+                setError("");
+              }}
               placeholder="2023-0142"
               placeholderTextColor="#9ca3af"
-              autoCapitalize="characters"
+              autoCapitalize="none"
               autoCorrect={false}
+              keyboardType="number-pad"
+              maxLength={9}
               style={styles.input}
             />
           </View>
+          <Text style={styles.hint}>8 digits, like 2023-0142</Text>
 
           <Text style={styles.label}>{isOrganizer ? "Department" : "Program"}</Text>
           <View style={styles.chips}>
@@ -236,19 +255,13 @@ export default function OnboardingScreen() {
           )}
 
           <Text style={styles.label}>Birthdate</Text>
-          <View style={styles.inputWrap}>
-            <Ionicons name="calendar-outline" size={18} color={colors.muted} />
-            <TextInput
-              value={birthdate}
-              onChangeText={setBirthdate}
-              placeholder="2003-04-12"
-              placeholderTextColor="#9ca3af"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
-              style={styles.input}
-            />
-          </View>
+          <DateField
+            value={birthdate}
+            onChange={(value) => {
+              setBirthdate(value);
+              setError("");
+            }}
+          />
 
           {error ? (
             <View style={styles.error} accessibilityRole="alert">
@@ -313,6 +326,14 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: colors.text,
     marginBottom: 7,
+    marginLeft: 2,
+  },
+  hint: {
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    color: colors.muted,
+    marginTop: -10,
+    marginBottom: 14,
     marginLeft: 2,
   },
   roles: {
