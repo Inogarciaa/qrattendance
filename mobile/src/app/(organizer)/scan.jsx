@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   confirmScan,
   getEvent,
+  getOrganizingEvents,
   getEvents,
   parseStudentQr,
   previewScan,
@@ -29,10 +30,16 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { formatTimestamp } from "../../lib/format";
 import { colors, fonts, radius, spacing } from "../../theme/tokens";
 
-export default function OrganizerScanScreen() {
+/**
+ * The gatekeeper camera. Organizers reach it from their Events tab; students
+ * with a temporary grant open the same screen from the gatekeeper route, which
+ * is why the event list source is a prop instead of a hard-coded call.
+ */
+export default function OrganizerScanScreen({ tempAccess = false }) {
   const { eventId } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
+  const listEvents = tempAccess ? getOrganizingEvents : getEvents;
 
   const [events, setEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(true);
@@ -51,7 +58,7 @@ export default function OrganizerScanScreen() {
 
   const load = useCallback(async () => {
     try {
-      const data = await getEvents();
+      const data = await listEvents();
       setEvents(data);
       setEventsError("");
     } catch (err) {
@@ -59,14 +66,14 @@ export default function OrganizerScanScreen() {
     } finally {
       setEventsLoading(false);
     }
-  }, []);
+  }, [listEvents]);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       (async () => {
         try {
-          const data = await getEvents();
+          const data = await listEvents();
           if (active) {
             setEvents(data);
             setEventsError("");
@@ -81,7 +88,7 @@ export default function OrganizerScanScreen() {
       return () => {
         active = false;
       };
-    }, [])
+    }, [listEvents])
   );
 
   useEffect(
@@ -211,6 +218,12 @@ export default function OrganizerScanScreen() {
         events={events}
         loading={eventsLoading}
         error={eventsError}
+        emptyTitle={tempAccess ? "No gatekeeper access" : undefined}
+        emptyText={
+          tempAccess
+            ? "Your organizer access for this event has ended. Ask an admin to assign you again."
+            : undefined
+        }
         onRetry={load}
         onSelect={(id) => {
           setManualId(id);
@@ -240,12 +253,14 @@ export default function OrganizerScanScreen() {
           onPress={requestPermission}
           style={styles.permissionButton}
         />
-        <Button
-          label="Choose another event"
-          variant="secondary"
-          onPress={changeEvent}
-          style={styles.permissionSecondary}
-        />
+        {tempAccess ? null : (
+          <Button
+            label="Choose another event"
+            variant="secondary"
+            onPress={changeEvent}
+            style={styles.permissionSecondary}
+          />
+        )}
       </View>
     );
   }
@@ -278,10 +293,12 @@ export default function OrganizerScanScreen() {
               />
             </Pressable>
           </View>
-          <Pressable onPress={changeEvent} style={styles.changeEvent} hitSlop={8}>
-            <Ionicons name="swap-horizontal" size={13} color="rgba(255,255,255,0.65)" />
-            <Text style={styles.changeEventText}>Change event</Text>
-          </Pressable>
+          {tempAccess ? null : (
+            <Pressable onPress={changeEvent} style={styles.changeEvent} hitSlop={8}>
+              <Ionicons name="swap-horizontal" size={13} color="rgba(255,255,255,0.65)" />
+              <Text style={styles.changeEventText}>Change event</Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.middle}>
@@ -331,7 +348,7 @@ export default function OrganizerScanScreen() {
   );
 }
 
-function EventPicker({ events, loading, error, onRetry, onSelect }) {
+function EventPicker({ events, loading, error, emptyTitle, emptyText, onRetry, onSelect }) {
   const liveEvents = events.filter((item) => item.status === "live");
   const insets = useSafeAreaInsets();
 
@@ -354,9 +371,11 @@ function EventPicker({ events, loading, error, onRetry, onSelect }) {
         ) : liveEvents.length === 0 ? (
           <Card style={styles.pickerEmpty}>
             <Ionicons name="calendar-outline" size={22} color={colors.muted} />
-            <Text style={styles.pickerEmptyText}>No live events right now.</Text>
+            <Text style={styles.pickerEmptyText}>
+              {emptyTitle || "No live events right now."}
+            </Text>
             <Text style={styles.pickerEmptyHint}>
-              Scanners become available when an event starts.
+              {emptyText || "Scanners become available when an event starts."}
             </Text>
           </Card>
         ) : (

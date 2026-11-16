@@ -130,6 +130,37 @@ export function fetchStudentAttendance(id) {
   return request(`/admin/students/${id}/attendance`);
 }
 
+/* ------------------------------------- temporary organizer access (0008) */
+
+export function fetchTempOrganizers(eventId) {
+  return request(`/admin/events/${eventId}/temp-organizers`);
+}
+
+export function addTempOrganizer(eventId, profileId) {
+  return request(`/admin/events/${eventId}/temp-organizers`, {
+    method: "POST",
+    body: { profile_id: profileId },
+  });
+}
+
+export function removeTempOrganizer(eventId, profileId) {
+  return request(`/admin/events/${eventId}/temp-organizers/${profileId}`, {
+    method: "DELETE",
+  });
+}
+
+/** Students who asked to run the scanner for an event. */
+export function fetchOrganizerRequests(status = "pending") {
+  return request(`/admin/organizer-requests?status=${encodeURIComponent(status)}`);
+}
+
+export function decideOrganizerRequest(id, approved) {
+  return request(`/admin/organizer-requests/${id}`, {
+    method: "PATCH",
+    body: { approved },
+  });
+}
+
 export function fetchReports(filters = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {

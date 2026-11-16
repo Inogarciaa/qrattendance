@@ -14,10 +14,11 @@ This folder defines the database only; the API in `backend/` talks to it.
 | `migrations/0005_signup_approval.sql` | `profiles.approved_at` for the Google sign-up approval queue |
 | `migrations/0006_geofence.sql` | venue coordinates on `events`, location evidence on `attendance` |
 | `migrations/0007_avatars.sql` | public `avatars` storage bucket for optional profile photos |
+| `migrations/0008_temp_organizers.sql` | event-scoped gatekeeper grants (`event_temp_organizers`) and student requests (`organizer_requests`) |
 | `seed.sql` | default programs (SBIT, ARFIEN, SSLATE, SHTM) |
-| `apply_all.sql` | all seven migrations + `seed.sql` in one paste-and-run script |
+| `apply_all.sql` | all eight migrations + `seed.sql` in one paste-and-run script |
 
-Apply in order (`0001` → `0002` → `0003` → `0004` → `0005` → `0006` → `0007` → `seed.sql`)
+Apply in order (`0001` → `0002` → `0003` → `0004` → `0005` → `0006` → `0007` → `0008` → `seed.sql`)
 in the Supabase SQL editor, or via the Supabase CLI:
 
 ```bash
@@ -27,10 +28,11 @@ supabase db push
 `apply_all.sql` is the fastest path for a fresh project: open the SQL editor, paste the
 whole file, run it once. All statements are idempotent, so re-running is safe.
 
-> **Next migration:** `0008_alignment.sql` is planned. It should add token hashing,
+> **Next migration:** `0009_alignment.sql` is planned. It should add token hashing,
 > year-level audiences, `report_exports`, and `audit_logs`. See `docs/DATA_MODEL.md`.
 
-Restart the API after applying a migration that adds a column (`0004`, `0005`, `0006`).
+Restart the API after applying a migration that adds a column or table (`0004`, `0005`,
+`0006`, `0008`).
 PostgREST caches the table schema, so new columns stay invisible to the API until
 its connection is recreated.
 
@@ -111,6 +113,40 @@ Many-to-many: organizers assigned to an event. PK `(event_id, profile_id)`.
 Many-to-many: programs expected at an event. Drives the "Enrolled" denominator.
 PK `(event_id, program_id)`.
 
+### `event_temp_organizers`
+Event-scoped gatekeeper grants for **student** accounts (`0008`). A student keeps
+their own QR, self check-in and history; they just gain the scanner for one event.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| event_id | uuid | PK part, FK → events (cascade) |
+| profile_id | uuid | PK part, FK → profiles (cascade) |
+| expires_at | timestamptz | event end + 60 minutes in `Asia/Manila`, enforced per request |
+| granted_by | uuid | FK → profiles (admin who granted it) |
+| created_at | timestamptz | |
+
+Keeping grants in their own table means `PUT /events/:id/organizers` (which replaces the
+permanent organizer list) cannot wipe them. No cron job is needed: every scan re-checks
+`expires_at`.
+
+### `organizer_requests`
+A student asking to work the scanner for one event (`0008`). Approving creates the
+matching `event_temp_organizers` row.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| id | uuid | PK |
+| event_id | uuid | FK → events (cascade) |
+| profile_id | uuid | FK → profiles (cascade) |
+| note | text | optional message to the admin |
+| status | text | `pending` / `approved` / `declined` |
+| decided_by | uuid | FK → profiles (admin) |
+| decided_at | timestamptz | |
+| created_at | timestamptz | |
+
+A partial unique index on `(event_id, profile_id) WHERE status = 'pending'` allows one
+open request per student and event; decided rows stay as history.
+
 ### `qr_tokens`
 Server-issued rotating tokens (30s TTL).
 
@@ -144,8 +180,10 @@ One record per student per event (`UNIQUE(event_id, student_id)`).
 
 ### `scan_attempts`
 Audit log of accepted and rejected scans (supports the 0%-expired-token metric).
-`reason` carries the token outcomes (`expired`, `consumed`, `not_found`, …) and the two
-location outcomes: `out_of_area` (rejected) and `location_unverified` (accepted, flagged).
+`reason` carries the token outcomes (`expired`, `consumed`, `not_found`, …), the two
+location outcomes — `out_of_area` (rejected) and `location_unverified` (accepted,
+flagged) — and `self_scan` when a temporary gatekeeper tries to record their own
+attendance at their own gate.
 
 ### `event_summaries`
 Aggregated totals per event, written when an event is closed.
@@ -173,6 +211,8 @@ programs 1─┬─< profiles
 events 1─┬─< event_organizers >─┤
          ├─< event_audiences  >─┘
          ├─< attendance >─────── profiles
+         ├─< event_temp_organizers >─ profiles   (0008, expires_at)
+         ├─< organizer_requests >──── profiles   (0008, status)
          ├─< qr_tokens (subject)
          └─1 event_summaries
 profiles 1─< attendance, scan_attempts, events.created_by
@@ -184,17 +224,24 @@ Primary keys and unique constraints are automatic. Additional indexes:
 `profiles(program_id, role)`, `events(event_date, status)`,
 `event_organizers(profile_id)`, `event_audiences(program_id)`,
 `attendance(event_id, student_id, event_id+status)`,
-`qr_tokens(token, subject_type+subject_id)`, `scan_attempts(event_id, attempted_at)`.
+`qr_tokens(token, subject_type+subject_id)`, `scan_attempts(event_id, attempted_at)`,
+`event_temp_organizers(profile_id, expires_at)` (`0008`),
+`organizer_requests(status, created_at)` plus the pending-only unique index (`0008`).
 
 ## Security (RLS)
 
 Row Level Security is enabled on every table. Writes are intentionally **not** granted to
 clients — insert/update/delete run through the service role (the API layer) once connected.
 
-- **student** — own profile, events for their program, own attendance
+- **student** — own profile, events for their program, own attendance; own
+  `event_temp_organizers` rows and own `organizer_requests`
 - **organizer** — assigned events, student profiles, attendance for assigned events
-- **admin** — full event/report access
+- **admin** — full event/report access, including grant/revoke and request decisions
 - **superadmin** — same as admin (account management stays API/service-role only)
+
+`0008` also lets an active temporary gatekeeper read the granted event and its
+attendance rows, even when the event is not in their program's audience. The mobile app
+goes through the API; this policy is defense in depth.
 
 ## Helper functions
 

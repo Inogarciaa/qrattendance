@@ -26,7 +26,7 @@ async function loadStudent(studentId) {
   return data;
 }
 
-router.post("/preview", requireAuth, requireRole("admin", "organizer"), async (req, res) => {
+router.post("/preview", requireAuth, async (req, res) => {
   const { event_id, token } = req.body || {};
   if (!event_id || !token) return res.status(400).json({ error: "event_id and token are required" });
 
@@ -40,6 +40,16 @@ router.post("/preview", requireAuth, requireRole("admin", "organizer"), async (r
   if (!check.ok) {
     await logAttempt({ event_id, scanned_by: req.user.id, method: "gatekeeper", result: "rejected", reason: check.reason, token });
     return res.status(422).json({ error: "Invalid or expired QR code", reason: check.reason });
+  }
+
+  // A student can be a temporary gatekeeper. They still cannot record their
+  // own attendance through the gate they are running.
+  if (check.row.subject_id === req.user.id) {
+    await logAttempt({ event_id, student_id: req.user.id, scanned_by: req.user.id, method: "gatekeeper", result: "rejected", reason: "self_scan", token });
+    return res.status(422).json({
+      error: "That is your own code. Ask another organizer to scan you.",
+      reason: "self_scan",
+    });
   }
 
   const student = await loadStudent(check.row.subject_id);
@@ -58,7 +68,7 @@ router.post("/preview", requireAuth, requireRole("admin", "organizer"), async (r
   });
 });
 
-router.post("/confirm", requireAuth, requireRole("admin", "organizer"), async (req, res) => {
+router.post("/confirm", requireAuth, async (req, res) => {
   const { event_id, token } = req.body || {};
   if (!event_id || !token) return res.status(400).json({ error: "event_id and token are required" });
 
@@ -75,6 +85,14 @@ router.post("/confirm", requireAuth, requireRole("admin", "organizer"), async (r
   if (!check.ok) {
     await logAttempt({ event_id, scanned_by: req.user.id, method: "gatekeeper", result: "rejected", reason: check.reason, token });
     return res.status(422).json({ error: "Invalid or expired QR code", reason: check.reason });
+  }
+
+  if (check.row.subject_id === req.user.id) {
+    await logAttempt({ event_id, student_id: req.user.id, scanned_by: req.user.id, method: "gatekeeper", result: "rejected", reason: "self_scan", token });
+    return res.status(422).json({
+      error: "That is your own code. Ask another organizer to scan you.",
+      reason: "self_scan",
+    });
   }
 
   const student = await loadStudent(check.row.subject_id);

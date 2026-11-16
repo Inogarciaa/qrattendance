@@ -101,6 +101,7 @@ temporary password or one-time code and force a password change on first login.
 | STU-03 | Self-service check-in succeeds only when the event is live, uses self-service/dual mode, the student is in the audience, the token is fresh and unused, and no attendance record exists yet. |
 | STU-04 | Student can view personal attendance history and status. |
 | STU-05 | The app shows clear success, duplicate, expired, wrong-event, and not-in-audience messages. |
+| STU-06 | Student can ask to run the scanner for one event, see the pending state, cancel the request, and open the gatekeeper scanner once approved — without losing their personal QR, self check-in or history. |
 
 ### 3.4 Mobile — organizer
 
@@ -112,6 +113,8 @@ temporary password or one-time code and force a password change on first login.
 | ORG-04 | Every scan attempt is logged with result/reason, scanner, event, student, device, and processing time. |
 | ORG-05 | Organizer sees a live count of present/late/absent students for the event. |
 | ORG-06 | Organizer cannot scan for an event they are not assigned to, and cannot use gatekeeper mode when the event is self-service only. |
+| ORG-07 | An admin can grant a student temporary gatekeeper access to one event, or approve the student's request. `profiles.role` does not change, so the student's personal QR, self check-in and history keep working. |
+| ORG-08 | Temporary access ends automatically one hour after the event's end time (`Asia/Manila`), can be revoked at any time, and never lets the grant-holder record their own attendance at their own gate. |
 
 ### 3.5 Live monitoring and reports (web)
 
@@ -123,6 +126,7 @@ temporary password or one-time code and force a password change on first login.
 | RPT-04 | Admin can filter attendance by event, status, program, and date range. |
 | RPT-05 | Admin can export the filtered result to CSV (and later XLSX/PDF). |
 | RPT-06 | Each export is recorded in `report_exports` for auditability. |
+| RPT-07 | Admin can see the active temporary gatekeepers for an event, revoke one, and approve or decline student organizer requests from the approvals queue. |
 
 ### 3.6 Superadmin
 
@@ -153,8 +157,9 @@ temporary password or one-time code and force a password change on first login.
 6. **Audience check** — an empty `event_audiences` set means the event is open to
    all programs; otherwise the student's program (and year level, if configured)
    must match.
-7. **Organizer scope** — a gatekeeper scan is allowed only for an admin or an
-   organizer assigned to that event.
+7. **Organizer scope** — a gatekeeper scan is allowed only for an admin, an
+   organizer assigned to that event, or a student holding an unexpired temporary
+   grant for it.
 8. **Self-service scope** — only a student may call self-check-in, and only for
    an event in `self_service` or `dual` mode.
 9. **Duplicate scans** — a second check-in returns the existing record and does
@@ -166,6 +171,10 @@ temporary password or one-time code and force a password change on first login.
     as well as status.
 12. **Photo data** — profile photos are used only for identity verification and
     must not be exposed to unauthenticated clients.
+13. **Temporary gatekeeper access** — stored per event, never on `profiles.role`,
+    so the account stays a student. It expires at event end + 60 minutes
+    (`Asia/Manila`), is re-checked on every request instead of by a scheduled job,
+    and the grant-holder cannot scan their own personal QR at their own gate.
 
 ---
 

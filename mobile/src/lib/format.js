@@ -84,6 +84,20 @@ export function formatTimeRange(start, end) {
   return `${from} – ${to}`;
 }
 
+/** ISO timestamp → "Nov 17, 5:00 PM" in campus time. */
+export function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: CAMPUS_TIME_ZONE,
+  });
+}
+
 /** ISO timestamp → "8:04 AM" in campus time. */
 export function formatTimestamp(value) {
   if (!value) return "";

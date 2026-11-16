@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Brightness from "expo-brightness";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
@@ -8,8 +8,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   buildStudentQrPayload,
+  cancelOrganizerRequest,
   getEvents,
+  getOrganizingEvents,
   issueStudentToken,
+  requestOrganizerAccess,
 } from "../../api/client";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/Button";
@@ -17,14 +20,17 @@ import { Card } from "../../components/Card";
 import { CountdownRing } from "../../components/CountdownRing";
 import { useApp } from "../../context/AppContext";
 import { useQrToken } from "../../hooks/useQrToken";
-import { formatClock } from "../../lib/format";
+import { formatClock, formatDateTime } from "../../lib/format";
 import { colors, fonts, radius, spacing } from "../../theme/tokens";
 
 export default function StudentQrScreen() {
   const { user } = useApp();
   const insets = useSafeAreaInsets();
   const [liveEvents, setLiveEvents] = useState([]);
+  const [grants, setGrants] = useState([]);
   const [eventsError, setEventsError] = useState("");
+  const [requestBusyId, setRequestBusyId] = useState("");
+  const [requestError, setRequestError] = useState("");
 
   const { token, secondsLeft, expired, windowSeconds, progress, loading, error, generate } =
     useQrToken({ issue: issueStudentToken, auto: false });
@@ -43,12 +49,12 @@ export default function StudentQrScreen() {
       }
 
       let active = true;
-      getEvents()
-        .then((events) => {
-          if (active) {
-            setLiveEvents(events.filter((event) => event.status === "live"));
-            setEventsError("");
-          }
+      Promise.all([getEvents(), getOrganizingEvents()])
+        .then(([events, grantsList]) => {
+          if (!active) return;
+          setLiveEvents(events.filter((event) => event.status === "live"));
+          setGrants(grantsList);
+          setEventsError("");
         })
         .catch((err) => {
           if (active) setEventsError(err?.message || "Could not load events.");
@@ -96,6 +102,30 @@ export default function StudentQrScreen() {
       };
     }, [hasCode])
   );
+
+  const refreshLiveEvents = async () => {
+    const events = await getEvents();
+    setLiveEvents(events.filter((event) => event.status === "live"));
+  };
+
+  const toggleRequest = async (event) => {
+    if (requestBusyId) return;
+
+    setRequestBusyId(event.id);
+    setRequestError("");
+    try {
+      if (event.myRequest?.status === "pending") {
+        await cancelOrganizerRequest(event.id);
+      } else {
+        await requestOrganizerAccess(event.id);
+      }
+      await refreshLiveEvents();
+    } catch (err) {
+      setRequestError(err?.message || "Could not update the request.");
+    } finally {
+      setRequestBusyId("");
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -175,10 +205,55 @@ export default function StudentQrScreen() {
           )}
         </Card>
 
+        {grants.length > 0 && (
+          <>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Your gatekeeper access</Text>
+              <Text style={styles.sectionCount}>{grants.length}</Text>
+            </View>
+
+            {grants.map((grant) => (
+              <Card key={grant.id} style={styles.grantCard}>
+                <View style={styles.grantHead}>
+                  <View style={styles.grantIcon}>
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={18}
+                      color={colors.brand}
+                    />
+                  </View>
+                  <View style={styles.grantBody}>
+                    <Text style={styles.grantTitle} numberOfLines={1}>
+                      {grant.title}
+                    </Text>
+                    <Text style={styles.grantMeta} numberOfLines={1}>
+                      {grant.venue} · until{" "}
+                      {formatDateTime(grant.grantExpiresAt)}
+                    </Text>
+                  </View>
+                </View>
+                <Button
+                  label="Open scanner"
+                  variant="soft"
+                  size="md"
+                  onPress={() => router.push(`/gatekeeper/${grant.id}`)}
+                  style={styles.grantButton}
+                />
+              </Card>
+            ))}
+          </>
+        )}
+
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Live now</Text>
           <Text style={styles.sectionCount}>{liveEvents.length}</Text>
         </View>
+
+        {requestError ? (
+          <Text style={styles.requestError} accessibilityRole="alert">
+            {requestError}
+          </Text>
+        ) : null}
 
         {liveEvents.length === 0 ? (
           <Card style={styles.emptyCard}>
@@ -188,19 +263,46 @@ export default function StudentQrScreen() {
             </Text>
           </Card>
         ) : (
-          liveEvents.map((event) => (
-            <Card key={event.id} style={styles.liveEvent} padded={false}>
-              <View style={styles.liveAccent} />
-              <View style={styles.liveBody}>
-                <Text style={styles.liveTitle} numberOfLines={1}>
-                  {event.title}
-                </Text>
-                <Text style={styles.liveMeta} numberOfLines={1}>
-                  {event.venue} · until {formatClock(event.endTime)}
-                </Text>
-              </View>
-            </Card>
-          ))
+          liveEvents.map((event) => {
+            const grant = grants.find((item) => item.id === event.id);
+            const pending = event.myRequest?.status === "pending";
+            const busy = requestBusyId === event.id;
+
+            return (
+              <Card key={event.id} style={styles.liveEvent} padded={false}>
+                <View style={styles.liveAccent} />
+                <View style={styles.liveBody}>
+                  <Text style={styles.liveTitle} numberOfLines={1}>
+                    {event.title}
+                  </Text>
+                  <Text style={styles.liveMeta} numberOfLines={1}>
+                    {event.venue} · until {formatClock(event.endTime)}
+                  </Text>
+
+                  {grant ? (
+                    <Text style={styles.liveNote}>
+                      You have gatekeeper access for this event.
+                    </Text>
+                  ) : (
+                    <Pressable
+                      onPress={() => toggleRequest(event)}
+                      hitSlop={6}
+                      disabled={busy}
+                      style={({ pressed }) => pressed && { opacity: 0.6 }}
+                    >
+                      <Text style={styles.liveAction}>
+                        {busy
+                          ? "Working…"
+                          : pending
+                            ? "Request sent · tap to cancel"
+                            : "Request to organize"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </Card>
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -367,5 +469,58 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: colors.muted,
     marginTop: 2,
+  },
+  liveNote: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: colors.green,
+    marginTop: 6,
+  },
+  liveAction: {
+    fontFamily: fonts.semibold,
+    fontSize: 11.5,
+    color: colors.brand,
+    marginTop: 6,
+  },
+  requestError: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    lineHeight: 17,
+    color: colors.red,
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  grantCard: {
+    marginBottom: 10,
+  },
+  grantHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  grantIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.tint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  grantBody: {
+    flex: 1,
+  },
+  grantTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 13.5,
+    color: colors.text,
+  },
+  grantMeta: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  grantButton: {
+    marginTop: 14,
   },
 });

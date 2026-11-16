@@ -61,6 +61,33 @@ function arrivalStatus(event, at = new Date()) {
   return now.minutes <= deadline ? "present" : "late";
 }
 
+/**
+ * The event's end as a real instant. Asia/Manila is UTC+8 all year, so the
+ * offset can be applied directly instead of depending on the host timezone.
+ */
+function eventEndInstant(event) {
+  const date = String(event?.event_date || "").slice(0, 10);
+  const time = String(event?.end_time || "");
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
+
+  if (!year || !month || !day || Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return null;
+  }
+
+  return new Date(Date.UTC(year, month - 1, day, hours - 8, minutes));
+}
+
+/**
+ * Temporary gatekeeper access ends an hour after the event, which covers late
+ * check-ins without leaving the grant open for the rest of the day.
+ */
+function organizerGrantExpiry(event, extraMinutes = 60) {
+  const end = eventEndInstant(event);
+  if (!end) return null;
+  return new Date(end.getTime() + extraMinutes * 60_000);
+}
+
 /** Tuesday, November 10, 2026 */
 function formatEventDate(value) {
   if (!value) return "";
@@ -80,5 +107,7 @@ module.exports = {
   timeToMinutes,
   isLiveWindow,
   arrivalStatus,
+  eventEndInstant,
+  organizerGrantExpiry,
   formatEventDate,
 };

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "../../components/ui/PageHeader";
 import Avatar from "../../components/ui/Avatar";
-import { fetchApprovals, fetchPrograms, setAccountApproval } from "../../lib/api";
+import {
+  decideOrganizerRequest,
+  fetchApprovals,
+  fetchOrganizerRequests,
+  fetchPrograms,
+  setAccountApproval,
+} from "../../lib/api";
 
 const ROLES = [
   { value: "student", label: "Student" },
@@ -19,12 +25,27 @@ function signedUpLabel(value) {
   });
 }
 
+function expiryLabel(value) {
+  if (!value) return "the end of the event";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "the end of the event";
+  return date.toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function ApprovalsPage() {
   const [rows, setRows] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [requestsEnabled, setRequestsEnabled] = useState(true);
   const [programs, setPrograms] = useState([]);
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
+  const [requestBusyId, setRequestBusyId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   // Unsaved role/department corrections, per account id.
@@ -32,9 +53,14 @@ export default function ApprovalsPage() {
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchApprovals();
+      const [data, requestData] = await Promise.all([
+        fetchApprovals(),
+        fetchOrganizerRequests().catch(() => ({ requests: [], enabled: false })),
+      ]);
       setRows(data.approvals || []);
       setEnabled(data.approvals_enabled !== false);
+      setRequests(requestData.requests || []);
+      setRequestsEnabled(requestData.enabled !== false);
       setDrafts({});
       setError("");
     } catch (err) {
@@ -111,11 +137,35 @@ export default function ApprovalsPage() {
   const pendingStudents = rows.filter((row) => row.role === "student").length;
   const pendingOrganizers = rows.filter((row) => row.role === "organizer").length;
 
+  const decideRequest = async (request, approved) => {
+    if (requestBusyId) return;
+
+    setRequestBusyId(request.id);
+    setError("");
+    setNotice("");
+
+    try {
+      const result = await decideOrganizerRequest(request.id, approved);
+      const name = request.profile?.full_name || "The student";
+      const eventName = request.event?.name || "the event";
+      setNotice(
+        approved
+          ? `${name} can scan for ${eventName} until ${expiryLabel(result.expires_at)}.`
+          : `${name} was declined for ${eventName}.`
+      );
+      await load();
+    } catch (err) {
+      setError(err.message || "Could not update this request.");
+    } finally {
+      setRequestBusyId("");
+    }
+  };
+
   return (
     <>
       <PageHeader
         title="Approvals"
-        description="Review the students and organizers who signed up with Google. Nobody can sign in until an account is approved."
+        description="Review the students and organizers who signed up with Google, plus students asking to run the scanner for an event. Nobody can sign in until an account is approved."
       />
 
       {!enabled && !loading && (
@@ -276,6 +326,114 @@ export default function ApprovalsPage() {
           </div>
         )}
       </div>
+
+      {requestsEnabled && (
+        <div className="card">
+          <div className="row" style={{ marginBottom: 16 }}>
+            <div>
+              <h2 style={{ fontWeight: 700, fontSize: 15 }}>Organizer requests</h2>
+              <p style={{ margin: 0, color: "var(--mu)", fontSize: 13 }}>
+                Students asking to run the scanner for one event. Approving keeps their
+                student account and adds gatekeeper access until an hour after the event.
+              </p>
+            </div>
+          </div>
+
+          {loading ? (
+            <p style={{ margin: 0, color: "var(--mu)" }}>Loading requests…</p>
+          ) : requests.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--mu)" }}>
+              No organizer requests right now.
+            </p>
+          ) : (
+            <div className="tw">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Event</th>
+                    <th>Note</th>
+                    <th>Requested</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.map((request) => {
+                    const busy = requestBusyId === request.id;
+                    const student = request.profile;
+                    const event = request.event;
+                    const studentMeta = [student?.school_id, student?.program?.code]
+                      .filter(Boolean)
+                      .join(" · ");
+                    const eventMeta = [event?.venue, event?.event_date]
+                      .filter(Boolean)
+                      .join(" · ");
+
+                    return (
+                      <tr key={request.id}>
+                        <td>
+                          <div className="who">
+                            <Avatar
+                              name={student?.full_name}
+                              photoUrl={student?.photo_url}
+                            />
+                            <div>
+                              <div>{student?.full_name || "Unknown student"}</div>
+                              <small style={{ color: "var(--mu)" }}>
+                                {studentMeta || "—"}
+                              </small>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <div>{event?.name || "Event removed"}</div>
+                          <small style={{ color: "var(--mu)" }}>
+                            {eventMeta || "—"}
+                          </small>
+                        </td>
+                        <td
+                          style={{
+                            maxWidth: 220,
+                            color: "var(--mu)",
+                            fontSize: 13,
+                          }}
+                        >
+                          {request.note || "—"}
+                        </td>
+                        <td style={{ color: "var(--mu)", fontSize: 13 }}>
+                          {signedUpLabel(request.created_at)}
+                        </td>
+                        <td>
+                          <span style={{ display: "inline-flex", gap: 8 }}>
+                            <button
+                              type="button"
+                              className="btn p"
+                              style={{ padding: "6px 12px", fontSize: 12 }}
+                              onClick={() => decideRequest(request, true)}
+                              disabled={busy}
+                            >
+                              {busy ? "Working…" : "Approve"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ padding: "6px 12px", fontSize: 12 }}
+                              onClick={() => decideRequest(request, false)}
+                              disabled={busy}
+                            >
+                              Decline
+                            </button>
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <h2>What happens next</h2>

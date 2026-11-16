@@ -80,14 +80,17 @@ disabled, so polling clients always see fresh attendance instead of a 304.
    - `supabase/migrations/0004_profiles_email.sql`
    - `supabase/migrations/0005_signup_approval.sql`
    - `supabase/migrations/0006_geofence.sql`
+   - `supabase/migrations/0007_avatars.sql`
+   - `supabase/migrations/0008_temp_organizers.sql`
    - `supabase/seed.sql`
 
-   Or paste the combined `supabase/apply_all.sql` once — it contains all six
+   Or paste the combined `supabase/apply_all.sql` once — it contains all eight
    migrations plus the seed programs.
 
-   Restart the API after applying `0005`/`0006`: PostgREST caches the column list,
-   so the new columns are invisible until the connection is recreated. (The API
-   also degrades gracefully meanwhile — see *Migrations are optional* below.)
+   Restart the API after applying `0005`/`0006`/`0008`: PostgREST caches the
+   table/column list, so new ones are invisible until the connection is
+   recreated. (The API also degrades gracefully meanwhile — see *Migrations are
+   optional* below.)
 3. In `backend/`, copy `.env.example` to `.env`, fill in the project URL and keys,
    and set `DATA_MODE=supabase`.
 4. Install and seed:
@@ -138,7 +141,30 @@ password). Codes come from `/auth/forgot-password` and are exchanged at
 - Validation rejects anything past `expires_at` (0% acceptance for expired tokens).
 - Every accept/reject is written to `scan_attempts` for security auditing.
 
-## Geofencing (migration 0006)
+## Temporary organizer access (migration 0008)
+
+Sometimes the person running the scanner is a student. Flipping
+`profiles.role` would take away their personal QR, self check-in and history, so
+the grant is **event-scoped** instead:
+
+- `event_temp_organizers` — `(event_id, profile_id)` with `expires_at`, computed
+  as the event end plus one hour in `Asia/Manila`. It lives in its own table so
+  `PUT /events/:id/organizers` (which replaces the permanent list) cannot wipe it.
+- `organizer_requests` — one pending request per student and event. Approving it
+  creates the grant; declining just closes the request.
+- `canScan()` checks permanent organizers first, then an unexpired grant, so
+  `/scan/preview`, `/scan/confirm` and `/tokens/display` accept a grant-holder
+  without a role change. Expiry is enforced per request; no cron job is needed.
+- `GET /events?scope=organizing` is what the mobile gatekeeper screen uses. It
+  returns only events with an active grant and includes `grant_expires_at`.
+- A grant-holder cannot record their own attendance through their own scanner
+  (`reason: "self_scan"`).
+
+Until `0008` is applied, these endpoints answer
+`503 { code: "migration_required" }`, `canScan()` ignores grants, and the
+dashboard/mobile entry points stay hidden.
+
+#### Geofencing (migration 0006)
 
 Self check-in has **two** gates: the rotating token *and* the venue fence. Gatekeeper
 scanning keeps its single gate — the organizer looking at the student — and is never
@@ -231,27 +257,29 @@ serving existing accounts as approved, and answers approval requests with
 | Method | Path | Role | Description |
 | --- | --- | --- | --- |
 | POST | `/tokens/student` | student | issue personal rotating token |
-| POST | `/tokens/display` | admin, organizer | body `{ event_id }` → event display token |
+| POST | `/tokens/display` | admin, organizer, active temp grant | body `{ event_id }` → event display token |
 
 ### Scanning
 
 | Method | Path | Role | Description |
 | --- | --- | --- | --- |
-| POST | `/scan/preview` | admin, organizer | body `{ event_id, token }` → student profile + photo, predicted status |
-| POST | `/scan/confirm` | admin, organizer | body `{ event_id, token }` → commits gatekeeper attendance |
+| POST | `/scan/preview` | admin, organizer, active temp grant | body `{ event_id, token }` → student profile + photo, predicted status |
+| POST | `/scan/confirm` | admin, organizer, active temp grant | body `{ event_id, token }` → commits gatekeeper attendance (rejects the scanner's own token) |
 | POST | `/scan/self-checkin` | student | body `{ event_id, token, latitude?, longitude?, accuracy?, mocked? }` → self-service attendance (fence applied when the event has coordinates) |
 
 ### Events
 
 | Method | Path | Role | Description |
 | --- | --- | --- | --- |
-| GET | `/events` | any | scoped list by role |
-| GET | `/events/:id` | any | detail + tally + enrolled audience count |
-| POST | `/events` | admin | create (accepts `organizer_ids`, `program_ids`, `latitude`, `longitude`, `geofence_radius_m`) |
+| GET | `/events` | any | scoped list by role; `?scope=organizing` returns the events this account has an active gatekeeper grant for |
+| GET | `/events/:id` | any | detail + tally + enrolled audience count + `my_access` |
+| POST | `/events` | admin | create (accepts `organizer_ids`, `temp_organizer_ids`, `program_ids`, `latitude`, `longitude`, `geofence_radius_m`) |
 | PUT | `/events/:id` | admin | update (same fields; send `latitude`/`longitude` as `null` to clear the fence) |
 | PUT | `/events/:id/organizers` | admin | replace organizers |
 | PUT | `/events/:id/audiences` | admin | replace audience programs |
 | POST | `/events/:id/close` | admin | aggregate, mark absents, write summary |
+| POST | `/events/:id/organizer-request` | student | ask to run the scanner for this event (`{ note? }`) |
+| DELETE | `/events/:id/organizer-request` | student | cancel my pending request |
 
 ### Admin
 
@@ -264,6 +292,11 @@ serving existing accounts as approved, and answers approval requests with
 | GET | `/admin/approvals` | admin | self sign-ups (students and organizers) with `approved_at IS NULL` → `{ approvals, approvals_enabled }` |
 | PATCH | `/admin/accounts/:id/approval` | admin | body `{ approved, role?, program_id? }` — approve (optionally correcting role/department) or delete a pending signup |
 | GET | `/admin/students/:id/attendance` | admin | attendance history |
+| GET | `/admin/events/:id/temp-organizers` | admin | active temporary gatekeepers for an event |
+| POST | `/admin/events/:id/temp-organizers` | admin | body `{ profile_id }` — grant a student scanner access until an hour after the event |
+| DELETE | `/admin/events/:id/temp-organizers/:profileId` | admin | revoke a grant |
+| GET | `/admin/organizer-requests` | admin | pending (`?status=`) student requests → `{ requests }` |
+| PATCH | `/admin/organizer-requests/:id` | admin | body `{ approved }` — approve (creates the grant) or decline |
 
 Import row shape:
 

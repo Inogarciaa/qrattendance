@@ -4,7 +4,9 @@ const { toEmail, buildPassword, toBirthdate } = require("../lib/password");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { isLocalMode } = require("../lib/mode");
 const { listAccounts } = require("../lib/local-db");
-const { hasApprovalColumn } = require("../lib/schema");
+const { hasApprovalColumn, hasTempOrganizerTables } = require("../lib/schema");
+const { organizerGrantExpiry } = require("../lib/clock");
+const { getEvent } = require("../services/attendance");
 
 const router = express.Router();
 
@@ -301,6 +303,174 @@ router.get("/students/:id/attendance", async (req, res) => {
   for (const row of data || []) tally[row.status] = (tally[row.status] || 0) + 1;
 
   res.json({ attendance: data, tally });
+});
+
+/* -------------------------------------- temporary organizer access (0008) */
+
+async function tempTablesReady(res) {
+  if (isLocalMode) {
+    res.status(501).json({ error: "Temporary organizer access needs Supabase mode" });
+    return false;
+  }
+  if (!(await hasTempOrganizerTables())) {
+    res.status(503).json({
+      error: "Temporary organizer access needs migration 0008_temp_organizers.sql",
+      code: "migration_required",
+    });
+    return false;
+  }
+  return true;
+}
+
+/** Active grants for one event, for the event panel on the dashboard. */
+router.get("/events/:id/temp-organizers", async (req, res) => {
+  if (!(await tempTablesReady(res))) return;
+
+  const { data, error } = await admin
+    .from("event_temp_organizers")
+    .select(
+      "expires_at, created_at, profile:profiles!profile_id(id, school_id, full_name, photo_url, program:programs(id, code, name))"
+    )
+    .eq("event_id", req.params.id)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  res.json({ organizers: data || [] });
+});
+
+/** Direct grant, used when the admin already knows who will run the scanner. */
+router.post("/events/:id/temp-organizers", async (req, res) => {
+  if (!(await tempTablesReady(res))) return;
+
+  const profileId = req.body?.profile_id;
+  if (!profileId) return res.status(400).json({ error: "profile_id is required" });
+
+  const event = await getEvent(req.params.id);
+  if (!event) return res.status(404).json({ error: "Event not found" });
+
+  const { data: profile, error } = await admin
+    .from("profiles")
+    .select("id, full_name, role, is_active")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!profile) return res.status(404).json({ error: "Student not found" });
+  if (profile.role !== "student") {
+    return res.status(400).json({ error: "Temporary gatekeepers must be student accounts" });
+  }
+  if (!profile.is_active) return res.status(400).json({ error: "That account is not active" });
+
+  const expiresAt = organizerGrantExpiry(event);
+  if (!expiresAt) {
+    return res.status(400).json({ error: "Set the event date and end time before granting access" });
+  }
+
+  const { error: grantError } = await admin.from("event_temp_organizers").upsert(
+    {
+      event_id: event.id,
+      profile_id: profile.id,
+      expires_at: expiresAt.toISOString(),
+      granted_by: req.user.id,
+    },
+    { onConflict: "event_id,profile_id" }
+  );
+  if (grantError) throw grantError;
+
+  res.status(201).json({
+    organizer: {
+      profile_id: profile.id,
+      full_name: profile.full_name,
+      expires_at: expiresAt.toISOString(),
+    },
+  });
+});
+
+router.delete("/events/:id/temp-organizers/:profileId", async (req, res) => {
+  if (!(await tempTablesReady(res))) return;
+
+  const { error } = await admin
+    .from("event_temp_organizers")
+    .delete()
+    .eq("event_id", req.params.id)
+    .eq("profile_id", req.params.profileId);
+  if (error) throw error;
+
+  res.json({ ok: true });
+});
+
+/** Student requests waiting for a decision. */
+router.get("/organizer-requests", async (req, res) => {
+  if (!(await tempTablesReady(res))) return;
+
+  const status = String(req.query.status || "pending");
+  const { data, error } = await admin
+    .from("organizer_requests")
+    .select(
+      "id, note, status, created_at, decided_at, event:events(id, name, venue, event_date, start_time, end_time, status), profile:profiles!profile_id(id, school_id, full_name, photo_url, program:programs(id, code, name))"
+    )
+    .eq("status", status)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  res.json({ requests: data || [] });
+});
+
+/**
+ * Approving creates the same time-boxed grant as a manual assignment. Nothing
+ * about the student's role changes, so their own QR keeps working.
+ */
+router.patch("/organizer-requests/:id", async (req, res) => {
+  if (!(await tempTablesReady(res))) return;
+
+  const approved = Boolean(req.body?.approved);
+  const { data: request, error } = await admin
+    .from("organizer_requests")
+    .select("id, event_id, profile_id, status")
+    .eq("id", req.params.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!request) return res.status(404).json({ error: "Request not found" });
+  if (request.status !== "pending") {
+    return res.status(409).json({ error: "This request was already decided." });
+  }
+
+  let expiresAt = null;
+  if (approved) {
+    const event = await getEvent(request.event_id);
+    if (!event) return res.status(404).json({ error: "Event not found" });
+
+    const expiry = organizerGrantExpiry(event);
+    if (!expiry) {
+      return res.status(400).json({ error: "That event has no valid date and end time" });
+    }
+    expiresAt = expiry.toISOString();
+
+    const { error: grantError } = await admin.from("event_temp_organizers").upsert(
+      {
+        event_id: event.id,
+        profile_id: request.profile_id,
+        expires_at: expiresAt,
+        granted_by: req.user.id,
+      },
+      { onConflict: "event_id,profile_id" }
+    );
+    if (grantError) throw grantError;
+  }
+
+  const { data: updated, error: updateError } = await admin
+    .from("organizer_requests")
+    .update({
+      status: approved ? "approved" : "declined",
+      decided_by: req.user.id,
+      decided_at: new Date().toISOString(),
+    })
+    .eq("id", request.id)
+    .select()
+    .single();
+  if (updateError) throw updateError;
+
+  res.json({ request: updated, expires_at: expiresAt });
 });
 
 module.exports = router;

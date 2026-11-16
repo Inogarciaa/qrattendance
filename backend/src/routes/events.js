@@ -2,12 +2,27 @@ const express = require("express");
 const { admin } = require("../lib/supabase");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { isLocalMode } = require("../lib/mode");
-const { isLiveWindow } = require("../lib/clock");
+const { isLiveWindow, organizerGrantExpiry } = require("../lib/clock");
 const { parseGeoInput } = require("../lib/geo");
-const { hasGeofenceColumns } = require("../lib/schema");
+const { hasGeofenceColumns, hasTempOrganizerTables } = require("../lib/schema");
+const { getEvent, findGrant } = require("../services/attendance");
 const localDb = require("../lib/local-db");
 
 const router = express.Router();
+
+/** Pending/approved gatekeeper requests for the signed-in student. */
+async function myOrganizerRequests(user) {
+  if (user.role !== "student" || !(await hasTempOrganizerTables())) return [];
+
+  const { data, error } = await admin
+    .from("organizer_requests")
+    .select("id, event_id, status, created_at")
+    .eq("profile_id", user.id)
+    .in("status", ["pending", "approved"])
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
 
 const EVENT_FIELDS =
   "id, name, description, venue, event_date, start_time, end_time, grace_minutes, scan_mode, status, qr_window_seconds, created_by, created_at";
@@ -92,10 +107,38 @@ function decorateLocal(event) {
 
 router.get("/", requireAuth, async (req, res) => {
   const withCounts = String(req.query.with_counts || "") === "1";
+  const organizing = String(req.query.scope || "") === "organizing";
 
   if (isLocalMode) {
+    if (organizing) return res.json({ events: [] });
     const events = localDb.listEvents();
-    return res.json({ events: withCounts ? events.map(decorateLocal) : events });
+    return res.json({
+      events: withCounts ? events.map(decorateLocal) : events,
+      my_requests: [],
+    });
+  }
+
+  // Events this account can run the scanner for. Works for students because
+  // temporary organizer access is stored per event, not on profiles.role.
+  if (organizing) {
+    if (!(await hasTempOrganizerTables())) return res.json({ events: [] });
+
+    const { data, error } = await admin
+      .from("event_temp_organizers")
+      .select(`expires_at, event:events(${await eventFields()})`)
+      .eq("profile_id", req.user.id)
+      .gt("expires_at", new Date().toISOString())
+      .order("expires_at", { ascending: true });
+    if (error) throw error;
+
+    const events = (data || [])
+      .filter((row) => row.event)
+      .map((row) => ({
+        ...row.event,
+        live: isLiveWindow(row.event),
+        grant_expires_at: row.expires_at,
+      }));
+    return res.json({ events });
   }
 
   let query = admin.from("events").select(`${await eventFields()}, event_organizers(profile_id), event_audiences(program_id)`).order("event_date", { ascending: false });
@@ -118,7 +161,69 @@ router.get("/", requireAuth, async (req, res) => {
   if (error) throw error;
 
   const events = withCounts ? await decorateWithCounts(data || []) : data;
-  res.json({ events });
+  const requests = await myOrganizerRequests(req.user);
+  res.json({ events, my_requests: requests });
+});
+
+/**
+ * A student asks to work the scanner for one event. Approval creates a
+ * time-boxed grant; it never changes their role.
+ */
+router.post("/:id/organizer-request", requireAuth, requireRole("student"), async (req, res) => {
+  if (isLocalMode) {
+    return res.status(501).json({ error: "Organizer requests need Supabase mode" });
+  }
+  if (!(await hasTempOrganizerTables())) {
+    return res.status(503).json({
+      error: "Temporary organizer access needs migration 0008_temp_organizers.sql",
+      code: "migration_required",
+    });
+  }
+
+  const event = await getEvent(req.params.id);
+  if (!event) return res.status(404).json({ error: "Event not found" });
+  if (["completed", "cancelled"].includes(event.status)) {
+    return res.status(409).json({ error: "This event is already closed." });
+  }
+
+  const grant = await findGrant(req.user.id, event.id);
+  if (grant) {
+    return res.status(409).json({
+      error: "You already have gatekeeper access for this event.",
+      expires_at: grant.expires_at,
+    });
+  }
+
+  const note = String(req.body?.note || "").trim().slice(0, 280) || null;
+  const { data, error } = await admin
+    .from("organizer_requests")
+    .insert({ event_id: event.id, profile_id: req.user.id, note })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "You already asked to organize this event. Wait for the admin." });
+    }
+    throw error;
+  }
+
+  res.status(201).json({ request: data });
+});
+
+router.delete("/:id/organizer-request", requireAuth, requireRole("student"), async (req, res) => {
+  if (isLocalMode) {
+    return res.status(501).json({ error: "Organizer requests need Supabase mode" });
+  }
+  if (!(await hasTempOrganizerTables())) return res.json({ ok: true });
+
+  await admin
+    .from("organizer_requests")
+    .delete()
+    .eq("event_id", req.params.id)
+    .eq("profile_id", req.user.id)
+    .eq("status", "pending");
+  res.json({ ok: true });
 });
 
 router.get("/:id", requireAuth, async (req, res) => {
@@ -138,6 +243,7 @@ router.get("/:id", requireAuth, async (req, res) => {
       event: { ...event, event_summaries: [] },
       tally: { present: 0, late: 0, absent: 0 },
       enrolled,
+      my_access: { gatekeeper: false, expires_at: null, role: req.user.role },
     });
   }
 
@@ -174,7 +280,20 @@ router.get("/:id", requireAuth, async (req, res) => {
   const { count: enrolledCount, error: enrolledError } = await enrolledQuery;
   if (enrolledError) throw enrolledError;
 
-  res.json({ event: data, tally, enrolled: enrolledCount ?? 0 });
+  // Lets the mobile app decide whether to open the gatekeeper scanner for this
+  // event, even though the account is still a student.
+  const grant = await findGrant(req.user.id, req.params.id);
+
+  res.json({
+    event: { ...data, live: isLiveWindow(data) },
+    tally,
+    enrolled: enrolledCount ?? 0,
+    my_access: {
+      gatekeeper: Boolean(grant),
+      expires_at: grant?.expires_at ?? null,
+      role: req.user.role,
+    },
+  });
 });
 
 function eventPayload(body) {
@@ -203,6 +322,31 @@ async function replaceOrganizers(eventId, ids) {
   if (ids.length) {
     await admin.from("event_organizers").insert(ids.map((profile_id) => ({ event_id: eventId, profile_id })));
   }
+}
+
+/**
+ * Grants the whole list a time-boxed scanner role for this event. Kept in its
+ * own table so replacing the permanent organizer list cannot wipe grants.
+ */
+async function replaceTempOrganizers(event, ids, grantedBy) {
+  if (!Array.isArray(ids)) return;
+  if (!(await hasTempOrganizerTables())) return;
+
+  const expiresAt = organizerGrantExpiry(event);
+  if (!expiresAt) return;
+
+  await admin.from("event_temp_organizers").delete().eq("event_id", event.id);
+  if (!ids.length) return;
+
+  const { error } = await admin.from("event_temp_organizers").insert(
+    ids.map((profile_id) => ({
+      event_id: event.id,
+      profile_id,
+      expires_at: expiresAt.toISOString(),
+      granted_by: grantedBy,
+    }))
+  );
+  if (error) throw error;
 }
 
 async function replaceAudiences(eventId, ids) {
@@ -251,6 +395,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 
   await replaceOrganizers(event.id, body.organizer_ids);
   await replaceAudiences(event.id, body.program_ids);
+  await replaceTempOrganizers(event, body.temp_organizer_ids, req.user.id);
 
   res.status(201).json({ event });
 });
@@ -294,6 +439,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 
   await replaceOrganizers(event.id, body.organizer_ids);
   await replaceAudiences(event.id, body.program_ids);
+  await replaceTempOrganizers(event, body.temp_organizer_ids, req.user.id);
 
   res.json({ event });
 });

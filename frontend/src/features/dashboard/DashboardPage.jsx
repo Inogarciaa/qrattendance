@@ -4,10 +4,14 @@ import Icon from "../../components/ui/Icon";
 import StatusBadge from "../../components/ui/StatusBadge";
 import Avatar from "../../components/ui/Avatar";
 import {
+  addTempOrganizer,
   fetchEvent,
   fetchEvents,
   fetchLiveDashboard,
   fetchReports,
+  fetchTempOrganizers,
+  removeTempOrganizer,
+  searchStudents,
   updateEvent,
 } from "../../lib/api";
 import { formatTime, toMinutes } from "../../lib/format";
@@ -40,6 +44,18 @@ function capitalize(value) {
   return text ? text[0].toUpperCase() + text.slice(1) : "";
 }
 
+function expiryLabel(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function DashboardPage({ onNavigate }) {
   const [dashboard, setDashboard] = useState(null);
   const [events, setEvents] = useState([]);
@@ -56,6 +72,14 @@ export default function DashboardPage({ onNavigate }) {
   });
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const [tempOrganizers, setTempOrganizers] = useState([]);
+  const [accessEnabled, setAccessEnabled] = useState(true);
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [accessQuery, setAccessQuery] = useState("");
+  const [accessResults, setAccessResults] = useState([]);
+  const [accessSearching, setAccessSearching] = useState(false);
+  const [accessBusyId, setAccessBusyId] = useState("");
+  const [accessError, setAccessError] = useState("");
 
   const load = useCallback(async () => {
     const [liveData, eventData] = await Promise.all([
@@ -119,6 +143,88 @@ export default function DashboardPage({ onNavigate }) {
 
   const selectedEvent =
     detail?.event ?? events.find((event) => event.id === activeId) ?? null;
+
+  const loadTempOrganizers = useCallback(async (eventId) => {
+    if (!eventId) return;
+
+    try {
+      const data = await fetchTempOrganizers(eventId);
+      setTempOrganizers(data.organizers || []);
+      setAccessEnabled(true);
+      setAccessError("");
+    } catch (err) {
+      setTempOrganizers([]);
+      if (err.status === 503) {
+        setAccessEnabled(false);
+      } else {
+        setAccessError(err.message || "Could not load gatekeeper access.");
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeId) return;
+    setAccessOpen(false);
+    setAccessQuery("");
+    setAccessResults([]);
+    loadTempOrganizers(activeId);
+  }, [activeId, loadTempOrganizers]);
+
+  const searchAccessCandidates = async () => {
+    const q = accessQuery.trim();
+    if (!q || !activeId) return;
+
+    setAccessSearching(true);
+    setAccessError("");
+    try {
+      const data = await searchStudents({ q });
+      const granted = new Set(tempOrganizers.map((row) => row.profile?.id));
+      setAccessResults(
+        (data.students || [])
+          .filter((student) => !granted.has(student.id))
+          .slice(0, 8)
+      );
+    } catch (err) {
+      setAccessError(err.message || "Could not search students.");
+    } finally {
+      setAccessSearching(false);
+    }
+  };
+
+  const grantAccess = async (student) => {
+    if (!activeId) return;
+
+    setAccessBusyId(student.id);
+    setAccessError("");
+    try {
+      await addTempOrganizer(activeId, student.id);
+      setAccessResults([]);
+      setAccessQuery("");
+      await loadTempOrganizers(activeId);
+    } catch (err) {
+      setAccessError(err.message || "Could not grant access.");
+    } finally {
+      setAccessBusyId("");
+    }
+  };
+
+  const revokeAccess = async (student) => {
+    if (!activeId) return;
+
+    const name = student.profile?.full_name || "this student";
+    if (!window.confirm(`Remove ${name}'s gatekeeper access for this event?`)) return;
+
+    setAccessBusyId(student.profile?.id || "");
+    setAccessError("");
+    try {
+      await removeTempOrganizer(activeId, student.profile?.id);
+      await loadTempOrganizers(activeId);
+    } catch (err) {
+      setAccessError(err.message || "Could not remove access.");
+    } finally {
+      setAccessBusyId("");
+    }
+  };
 
   const counts = useMemo(() => {
     const tally = detail?.tally || { present: 0, late: 0, absent: 0 };
@@ -476,6 +582,158 @@ export default function DashboardPage({ onNavigate }) {
               </div>
             ))}
           </div>
+
+          {accessEnabled && selectedEvent && (
+            <div className="card">
+              <div className="row" style={{ marginBottom: 16 }}>
+                <div>
+                  <h2 style={{ fontWeight: 700, fontSize: 15 }}>Gatekeeper access</h2>
+                  <p style={{ margin: 0, color: "var(--mu)", fontSize: 13 }}>
+                    Students who can scan for <strong>{selectedEvent.name}</strong> without
+                    becoming organizers. Access ends one hour after the event.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setAccessOpen((open) => !open)}
+                >
+                  {accessOpen ? "Close" : "Add student"}
+                </button>
+              </div>
+
+              {accessOpen && (
+                <div style={{ marginBottom: 14 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      alignItems: "flex-end",
+                    }}
+                  >
+                    <div style={{ flex: "1 1 240px" }}>
+                      <Field id="access-search" label="Find a student">
+                        <input
+                          id="access-search"
+                          value={accessQuery}
+                          placeholder="Name or school ID"
+                          onChange={(event) => setAccessQuery(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              searchAccessCandidates();
+                            }
+                          }}
+                        />
+                      </Field>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={searchAccessCandidates}
+                      disabled={accessSearching || !accessQuery.trim()}
+                    >
+                      {accessSearching ? "Searching…" : "Search"}
+                    </button>
+                  </div>
+
+                  {accessResults.length > 0 && (
+                    <div className="orgs" style={{ marginTop: 10 }}>
+                      {accessResults.map((student) => (
+                        <button
+                          type="button"
+                          className="chip"
+                          key={student.id}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            padding: 0,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => grantAccess(student)}
+                          disabled={accessBusyId === student.id}
+                        >
+                          <span>
+                            {student.full_name}{" "}
+                            <small>
+                              {[student.school_id, student.program?.code]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {accessError && (
+                <p style={{ margin: "0 0 12px", color: "#dc2626", fontSize: 13 }} role="alert">
+                  {accessError}
+                </p>
+              )}
+
+              {tempOrganizers.length === 0 ? (
+                <p style={{ margin: 0, color: "var(--mu)" }}>
+                  No temporary gatekeepers for this event.
+                </p>
+              ) : (
+                <div className="tw">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th>Program</th>
+                        <th>Access until</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tempOrganizers.map((row) => {
+                        const student = row.profile;
+                        const busy = accessBusyId === student?.id;
+                        return (
+                          <tr key={student?.id || row.expires_at}>
+                            <td>
+                              <div className="who">
+                                <Avatar
+                                  name={student?.full_name}
+                                  photoUrl={student?.photo_url}
+                                />
+                                <div>
+                                  <div>{student?.full_name || "Unknown student"}</div>
+                                  <small style={{ color: "var(--mu)" }}>
+                                    {student?.school_id || "—"}
+                                  </small>
+                                </div>
+                              </div>
+                            </td>
+                            <td>{student?.program?.code || "—"}</td>
+                            <td style={{ color: "var(--mu)", fontSize: 13 }}>
+                              {expiryLabel(row.expires_at)}
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn"
+                                style={{ padding: "6px 12px", fontSize: 12 }}
+                                onClick={() => revokeAccess(row)}
+                                disabled={busy}
+                              >
+                                {busy ? "Removing…" : "Remove"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="card">
             <div className="row" style={{ marginBottom: 16 }}>

@@ -1,5 +1,6 @@
 const { admin } = require("../lib/supabase");
 const { arrivalStatus, isLiveWindow } = require("../lib/clock");
+const { hasTempOrganizerTables } = require("../lib/schema");
 
 /**
  * All event windows are evaluated in Asia/Manila. Building Dates from
@@ -40,7 +41,26 @@ async function canScan(user, eventId) {
     .eq("profile_id", user.id)
     .maybeSingle();
   if (error) throw error;
-  return Boolean(data);
+  if (data) return true;
+
+  // Students can be approved as a gatekeeper for one event. The grant carries
+  // its own expiry, so access disappears without an admin doing anything.
+  return Boolean(await findGrant(user.id, eventId));
+}
+
+/** Active temporary organizer grant for this profile and event, if any. */
+async function findGrant(profileId, eventId) {
+  if (!(await hasTempOrganizerTables())) return null;
+
+  const { data, error } = await admin
+    .from("event_temp_organizers")
+    .select("event_id, expires_at")
+    .eq("event_id", eventId)
+    .eq("profile_id", profileId)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
 }
 
 async function existingAttendance(eventId, studentId) {
@@ -73,6 +93,7 @@ module.exports = {
   isEnrolled,
   getEvent,
   canScan,
+  findGrant,
   existingAttendance,
   logAttempt,
 };

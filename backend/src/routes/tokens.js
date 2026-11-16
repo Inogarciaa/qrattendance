@@ -11,7 +11,7 @@ router.post("/student", requireAuth, requireRole("student"), async (req, res) =>
   res.json({ subject: "student", student_id: req.user.id, ...token });
 });
 
-router.post("/display", requireAuth, requireRole("admin", "organizer"), async (req, res) => {
+router.post("/display", requireAuth, async (req, res) => {
   const { event_id } = req.body || {};
   if (!event_id) return res.status(400).json({ error: "event_id is required" });
 

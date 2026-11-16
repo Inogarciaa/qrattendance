@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Field from "../../components/ui/Field";
 import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
-import { createEvent, fetchOrganizers, fetchPrograms } from "../../lib/api";
+import { createEvent, fetchOrganizers, fetchPrograms, searchStudents } from "../../lib/api";
 import { formatTime, toMinutes } from "../../lib/format";
 import LocationPicker from "./LocationPicker";
 
@@ -57,6 +57,10 @@ export default function CreateEventPage({ toast }) {
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationNote, setLocationNote] = useState("");
+  const [tempQuery, setTempQuery] = useState("");
+  const [tempResults, setTempResults] = useState([]);
+  const [tempSearching, setTempSearching] = useState(false);
+  const [tempSelected, setTempSelected] = useState([]);
 
   useEffect(() => {
     let active = true;
@@ -93,6 +97,39 @@ export default function CreateEventPage({ toast }) {
         : [...values, id],
     });
     setErrors({ ...errors, [listKey]: "" });
+  };
+
+  const searchTempCandidates = async () => {
+    const q = tempQuery.trim();
+    if (!q) return;
+
+    setTempSearching(true);
+    setSubmitError("");
+    try {
+      const data = await searchStudents({ q });
+      const picked = new Set(tempSelected.map((student) => student.id));
+      setTempResults(
+        (data.students || [])
+          .filter((student) => !picked.has(student.id))
+          .slice(0, 8)
+      );
+    } catch (err) {
+      setSubmitError(err.message || "Could not search students.");
+    } finally {
+      setTempSearching(false);
+    }
+  };
+
+  const addTempOrganizer = (student) => {
+    setTempSelected((current) =>
+      current.some((row) => row.id === student.id) ? current : [...current, student]
+    );
+    setTempResults([]);
+    setTempQuery("");
+  };
+
+  const removeTempOrganizer = (id) => {
+    setTempSelected((current) => current.filter((row) => row.id !== id));
   };
 
   const selfService = form.mode === "self_service";
@@ -232,6 +269,9 @@ export default function CreateEventPage({ toast }) {
         scan_mode: form.mode,
         program_ids: form.programs,
         organizer_ids: needsOrganizers ? form.organizers : [],
+        temp_organizer_ids: needsOrganizers
+          ? tempSelected.map((student) => student.id)
+          : [],
         ...(hasLat
           ? {
               latitude: Number(form.latitude),
@@ -255,6 +295,9 @@ export default function CreateEventPage({ toast }) {
     setSubmitError("");
     setLocationNote("");
     setCreated(null);
+    setTempQuery("");
+    setTempResults([]);
+    setTempSelected([]);
   };
 
   if (created) {
@@ -282,6 +325,12 @@ export default function CreateEventPage({ toast }) {
       ["Students", selectedPrograms],
     ];
     if (needsOrganizers) summaryRows.push(["Organizers", selectedOrganizers]);
+    if (tempSelected.length) {
+      summaryRows.push([
+        "Temporary organizers",
+        tempSelected.map((student) => student.full_name).join(", "),
+      ]);
+    }
     if (form.latitude.trim() && form.longitude.trim()) {
       summaryRows.push(["Venue fence", `${form.radius} m radius`]);
     }
@@ -529,6 +578,100 @@ export default function CreateEventPage({ toast }) {
             <span className="err" role="alert">
               {errors.organizers}
             </span>
+          )}
+        </div>
+      )}
+
+      {needsOrganizers && (
+        <div className="card">
+          <h2>Temporary organizers</h2>
+          <p>
+            Optional. A student who runs the scanner for this event keeps their student
+            account, personal QR and history. Access ends one hour after the event and
+            can be revoked at any time.
+          </p>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "flex-end",
+            }}
+          >
+            <div style={{ flex: "1 1 260px" }}>
+              <Field id="temp-search" label="Find a student">
+                <input
+                  id="temp-search"
+                  value={tempQuery}
+                  placeholder="Name or school ID"
+                  onChange={(event) => setTempQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      searchTempCandidates();
+                    }
+                  }}
+                />
+              </Field>
+            </div>
+            <button
+              type="button"
+              className="btn"
+              onClick={searchTempCandidates}
+              disabled={tempSearching || !tempQuery.trim()}
+            >
+              {tempSearching ? "Searching…" : "Search"}
+            </button>
+          </div>
+
+          {tempResults.length > 0 && (
+            <div className="orgs" style={{ marginTop: 10 }}>
+              {tempResults.map((student) => (
+                <button
+                  type="button"
+                  className="chip"
+                  key={student.id}
+                  style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer" }}
+                  onClick={() => addTempOrganizer(student)}
+                >
+                  <span>
+                    {student.full_name}{" "}
+                    <small>
+                      {[student.school_id, student.program?.code]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tempSelected.length > 0 && (
+            <div className="orgs" style={{ marginTop: 10 }}>
+              {tempSelected.map((student) => (
+                <span className="chip" key={student.id}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    {student.full_name} <small>{student.school_id}</small>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ padding: "2px 8px", fontSize: 11 }}
+                      onClick={() => removeTempOrganizer(student.id)}
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </span>
+              ))}
+            </div>
           )}
         </div>
       )}

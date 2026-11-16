@@ -6,7 +6,7 @@ API in `../backend` — there is no mock data in this app.
 
 | Role | Screens |
 | --- | --- |
-| **Student** | My QR (rotating personal code), Scan (self check-in), History, Profile |
+| **Student** | My QR (rotating personal code + gatekeeper access), Scan (self check-in), History, Profile |
 | **Organizer** | Events, Event QR (rotating display code), Scan (gatekeeper), Profile |
 
 ## How data flows
@@ -182,7 +182,10 @@ Supabase → Authentication → URL Configuration.
 - **My QR** — requests a personal token when opened. It expires after 30
   seconds and the QR is replaced by a **Generate again** button, so nothing is
   refreshed behind the student's back. Brightness is raised while a code is
-  showing and restored afterwards.
+  showing and restored afterwards. Under the code, **Your gatekeeper access**
+  lists any events where an admin granted this student the scanner, with the
+  expiry and an **Open scanner** button, and each live event offers
+  **Request to organize** (tap again to cancel a pending request).
 - **Scan** — scans the organizer's event code and registers a self check-in.
   A location fix is requested on the same tap; the API checks the venue fence.
   Shows checked in / late / outside the venue / already checked in /
@@ -198,7 +201,9 @@ Supabase → Authentication → URL Configuration.
   and attendance progress.
 - **Event QR** — rotating display code for a live event.
 - **Scan** — gatekeeper mode: camera → student preview → confirm, with live
-  counts refreshed after each check-in.
+  counts refreshed after each check-in. Students with a temporary grant open the
+  same screen from `/gatekeeper/[eventId]`; it then lists only granted events and
+  hides **Change event**. The API rejects scanning your own QR at your own gate.
 - **Profile** — assigned events, total scans, and turnout.
 
 ## Camera
@@ -241,6 +246,8 @@ mobile/
 │   │   │   ├── scan.jsx
 │   │   │   ├── history.jsx
 │   │   │   └── profile.jsx
+│   │   ├── gatekeeper/
+│   │   │   └── [eventId].jsx     # student with a temporary grant → gatekeeper scanner
 │   │   └── (organizer)/
 │   │       ├── _layout.jsx
 │   │       ├── events.jsx
@@ -295,5 +302,9 @@ npm run lint       # eslint via expo lint
   log out.
 - The API is the source of truth for who may scan what: organizers only see
   events they are assigned to, and students only see events for their program.
+- Temporary gatekeeper access is event-scoped, so a student with a grant keeps
+  every student screen. `GET /events?scope=organizing` drives the gatekeeper
+  card and scanner; the grant disappears by itself an hour after the event, and
+  the app falls back to the normal student view.
 - The web build (`npm run web`) is handy for checking layout, but use a phone
   for camera testing.

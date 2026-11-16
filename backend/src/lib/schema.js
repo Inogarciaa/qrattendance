@@ -61,4 +61,16 @@ const hasGeofenceColumns = columnProbe({
   enabled: "venue geofencing is enabled",
 });
 
-module.exports = { hasApprovalColumn, hasGeofenceColumns };
+/**
+ * Migration 0008 adds the temporary organizer tables. Until it is applied,
+ * grants and requests are simply unavailable: canScan keeps its old meaning
+ * and the mobile/dashboard entry points stay hidden.
+ */
+const hasTempOrganizerTables = columnProbe({
+  table: "event_temp_organizers",
+  column: "expires_at",
+  migration: "0008_temp_organizers.sql",
+  enabled: "temporary organizer access is enabled",
+});
+
+module.exports = { hasApprovalColumn, hasGeofenceColumns, hasTempOrganizerTables };

@@ -497,16 +497,59 @@ export async function fetchMe() {
 
 export async function getEvents() {
   const data = await request("/events?with_counts=1");
-  return (data.events || []).map(mapEvent).sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+  const requests = new Map(
+    (data.my_requests || []).map((row) => [row.event_id, row])
+  );
+
+  return (data.events || [])
+    .map((event) => {
+      const request = requests.get(event.id);
+      return {
+        ...mapEvent(event),
+        myRequest: request ? { id: request.id, status: request.status } : null,
+      };
+    })
+    .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+}
+
+/**
+ * Events this account can run the scanner for. A student reaches this list
+ * through a temporary organizer grant, so it is short and carries its expiry.
+ */
+export async function getOrganizingEvents() {
+  const data = await request("/events?scope=organizing");
+  return (data.events || [])
+    .map((event) => ({
+      ...mapEvent(event),
+      grantExpiresAt: event.grant_expires_at || null,
+    }))
+    .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
 }
 
 export async function getEvent(eventId) {
   const data = await request(`/events/${eventId}`);
+  const event = data.event || {};
   return {
-    ...mapEvent(data.event),
-    enrolled: data.enrolled ?? data.event?.enrolled ?? 0,
-    raw: data.event,
+    ...mapEvent({
+      ...event,
+      tally: data.tally || event.tally,
+      enrolled: data.enrolled ?? event.enrolled,
+    }),
+    myAccess: data.my_access || null,
+    raw: event,
   };
+}
+
+/** Ask an admin to let this student run the scanner for one event. */
+export async function requestOrganizerAccess(eventId, note = "") {
+  return request(`/events/${eventId}/organizer-request`, {
+    method: "POST",
+    body: { note },
+  });
+}
+
+export async function cancelOrganizerRequest(eventId) {
+  return request(`/events/${eventId}/organizer-request`, { method: "DELETE" });
 }
 
 export async function getMyAttendance() {
