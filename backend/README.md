@@ -272,7 +272,7 @@ serving existing accounts as approved, and answers approval requests with
 | Method | Path | Role | Description |
 | --- | --- | --- | --- |
 | GET | `/events` | any | scoped list by role; `?scope=organizing` returns the events this account has an active gatekeeper grant for |
-| GET | `/events/:id` | any | detail + tally + enrolled audience count + `my_access` |
+| GET | `/events/:id` | staff, assigned organizer, audience student, active temp grant | detail + tally + enrolled audience count + `my_access` |
 | POST | `/events` | admin | create (accepts `organizer_ids`, `temp_organizer_ids`, `program_ids`, `latitude`, `longitude`, `geofence_radius_m`) |
 | PUT | `/events/:id` | admin | update (same fields; send `latitude`/`longitude` as `null` to clear the fence) |
 | PUT | `/events/:id/organizers` | admin | replace organizers |

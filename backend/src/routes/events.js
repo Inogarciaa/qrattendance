@@ -40,6 +40,30 @@ function programIdsOf(event) {
     .filter((id) => id !== null && id !== undefined);
 }
 
+/**
+ * Who may read one event: staff, an assigned organizer, a student in the
+ * audience (no audience rows = all programs), or an active temporary
+ * gatekeeper. Used by GET /events/:id; the service role otherwise bypasses RLS.
+ */
+function canViewEvent(user, event, grant = null) {
+  if (user.role === "admin" || user.role === "superadmin") return true;
+
+  const organizerIds = (event.event_organizers || [])
+    .map((row) => row.profile_id ?? row.profile?.id)
+    .filter(Boolean);
+  if (organizerIds.includes(user.id)) return true;
+
+  const programIds = programIdsOf(event);
+  if (
+    user.role === "student" &&
+    (programIds.length === 0 || programIds.includes(user.program_id))
+  ) {
+    return true;
+  }
+
+  return Boolean(grant);
+}
+
 async function attendanceTally(eventId) {
   const { data, error } = await admin
     .from("attendance")
@@ -150,19 +174,28 @@ router.get("/", requireAuth, async (req, res) => {
       .eq("event_organizers.profile_id", req.user.id)
       .order("event_date", { ascending: false });
   } else if (req.user.role === "student") {
+    // No !inner: an event without audience rows is open to every program and
+    // must still reach the student. The program filter runs after the fetch.
     query = admin
       .from("events")
-      .select(`${await eventFields()}, event_organizers(profile_id), event_audiences!inner(program_id)`)
-      .eq("event_audiences.program_id", req.user.program_id)
+      .select(`${await eventFields()}, event_organizers(profile_id), event_audiences(program_id)`)
       .order("event_date", { ascending: false });
   }
 
   const { data, error } = await query;
   if (error) throw error;
 
-  const events = withCounts ? await decorateWithCounts(data || []) : data;
+  let events = data || [];
+  if (req.user.role === "student") {
+    events = events.filter((event) => {
+      const programIds = (event.event_audiences || []).map((row) => row.program_id);
+      return programIds.length === 0 || programIds.includes(req.user.program_id);
+    });
+  }
+
+  const decorated = withCounts ? await decorateWithCounts(events) : events;
   const requests = await myOrganizerRequests(req.user);
-  res.json({ events, my_requests: requests });
+  res.json({ events: decorated, my_requests: requests });
 });
 
 /**
@@ -239,6 +272,10 @@ router.get("/:id", requireAuth, async (req, res) => {
       ? students.filter((student) => programIds.includes(student.program?.id)).length
       : students.length;
 
+    if (!canViewEvent(req.user, event)) {
+      return res.status(403).json({ error: "You do not have access to this event" });
+    }
+
     return res.json({
       event: { ...event, event_summaries: [] },
       tally: { present: 0, late: 0, absent: 0 },
@@ -256,6 +293,14 @@ router.get("/:id", requireAuth, async (req, res) => {
     .maybeSingle();
   if (error) throw error;
   if (!data) return res.status(404).json({ error: "Event not found" });
+
+  // Lets the mobile app decide whether to open the gatekeeper scanner for this
+  // event, even though the account is still a student. The same grant is part
+  // of the access check below.
+  const grant = await findGrant(req.user.id, req.params.id);
+  if (!canViewEvent(req.user, data, grant)) {
+    return res.status(403).json({ error: "You do not have access to this event" });
+  }
 
   const { data: counts, error: countError } = await admin
     .from("attendance")
@@ -279,10 +324,6 @@ router.get("/:id", requireAuth, async (req, res) => {
 
   const { count: enrolledCount, error: enrolledError } = await enrolledQuery;
   if (enrolledError) throw enrolledError;
-
-  // Lets the mobile app decide whether to open the gatekeeper scanner for this
-  // event, even though the account is still a student.
-  const grant = await findGrant(req.user.id, req.params.id);
 
   res.json({
     event: { ...data, live: isLiveWindow(data) },
@@ -346,6 +387,23 @@ async function replaceTempOrganizers(event, ids, grantedBy) {
       granted_by: grantedBy,
     }))
   );
+  if (error) throw error;
+}
+
+/**
+ * Rescheduling an event must not leave grants on the old window, or the
+ * gatekeeper is locked out early / keeps access after the new end time.
+ */
+async function refreshTempOrganizerExpiry(event) {
+  if (!(await hasTempOrganizerTables())) return;
+
+  const expiresAt = organizerGrantExpiry(event);
+  if (!expiresAt) return;
+
+  const { error } = await admin
+    .from("event_temp_organizers")
+    .update({ expires_at: expiresAt.toISOString() })
+    .eq("event_id", event.id);
   if (error) throw error;
 }
 
@@ -428,18 +486,34 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     });
   }
 
-  const { data: event, error } = await admin
-    .from("events")
-    .update(payload)
-    .eq("id", req.params.id)
-    .select()
-    .maybeSingle();
-  if (error) throw error;
+  // A request that only replaces organizers/temp organizers has no event fields
+  // to write, and PostgREST rejects an empty update payload.
+  let event;
+  if (Object.keys(payload).length) {
+    const { data, error } = await admin
+      .from("events")
+      .update(payload)
+      .eq("id", req.params.id)
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    event = data;
+  } else {
+    event = await getEvent(req.params.id);
+  }
   if (!event) return res.status(404).json({ error: "Event not found" });
 
   await replaceOrganizers(event.id, body.organizer_ids);
   await replaceAudiences(event.id, body.program_ids);
   await replaceTempOrganizers(event, body.temp_organizer_ids, req.user.id);
+
+  // When the admin edits the date or end time without resending the grant list,
+  // move the existing grants to the new event end.
+  const scheduleChanged =
+    Object.hasOwn(payload, "event_date") || Object.hasOwn(payload, "end_time");
+  if (body.temp_organizer_ids === undefined && scheduleChanged) {
+    await refreshTempOrganizerExpiry(event);
+  }
 
   res.json({ event });
 });

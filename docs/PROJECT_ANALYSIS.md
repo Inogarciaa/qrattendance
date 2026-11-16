@@ -232,28 +232,17 @@ These are real issues to close before the system is considered feature-complete:
 1. **Service-role bypasses RLS.** The API uses the Supabase service-role key for
    every query, so Postgres RLS does not protect route handlers. Each endpoint
    must perform its own role/assignment/audience checks.
-2. **Event detail is not scoped.** `GET /api/events/:id` lets any authenticated
-   user read any event. It should check admin/superadmin, assigned organizer, or
-   student audience membership.
-3. **Gatekeeper scan does not re-check liveness or audience.** `POST
+2. **Gatekeeper scan does not re-check liveness or audience.** `POST
    /api/scan/confirm` validates the token and duplicate state, but not whether the
    event is live or the student is in the audience. Move all checks into the
    confirm transaction.
-4. **Organizer cancellation is not logged.** The ERD expects
+3. **Organizer cancellation is not logged.** The ERD expects
    `cancelled_by_officer`; the current preview/confirm flow has no cancel
    endpoint or log entry.
-5. **Report exports are not audited.** CSV export works, but no `report_exports`
+4. **Report exports are not audited.** CSV export works, but no `report_exports`
    row is written.
-6. **Raw tokens are stored.** `qr_tokens.token` and `scan_attempts.token` hold the
+5. **Raw tokens are stored.** `qr_tokens.token` and `scan_attempts.token` hold the
    raw value. Store a hash instead.
-7. **All-program events are hidden from students.** `GET /api/events` uses an
-   inner join on `event_audiences`, so an event with no audience rows (meaning
-   "all programs") does not appear. Change the query or insert explicit audience
-   rows.
-8. **`/auth/me` returns the full profile.** It includes private fields such as
-   `birthdate`. Return only the fields the client needs.
-9. **No superadmin enforcement.** The role does not exist yet in the enum, RLS,
-   or route guards.
 
 ---
 
