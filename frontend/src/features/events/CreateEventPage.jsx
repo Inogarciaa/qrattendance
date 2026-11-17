@@ -248,8 +248,8 @@ export default function CreateEventPage({ toast }) {
     if (!form.programs.length) {
       nextErrors.programs = "Select at least one program that will attend.";
     }
-    if (needsOrganizers && !form.organizers.length) {
-      nextErrors.organizers = "Select at least one organizer.";
+    if (needsOrganizers && !form.organizers.length && !tempSelected.length) {
+      nextErrors.organizers = "Add at least one organizer or temporary organizer.";
     }
 
     setErrors(nextErrors);
@@ -324,7 +324,12 @@ export default function CreateEventPage({ toast }) {
       ["Scanning method", modeLabel],
       ["Students", selectedPrograms],
     ];
-    if (needsOrganizers) summaryRows.push(["Organizers", selectedOrganizers]);
+    if (needsOrganizers) {
+      summaryRows.push([
+        "Organizers",
+        selectedOrganizers || "None — temporary organizers only",
+      ]);
+    }
     if (tempSelected.length) {
       summaryRows.push([
         "Temporary organizers",
@@ -549,13 +554,16 @@ export default function CreateEventPage({ toast }) {
         <div className="card">
           <h2>Assign organizers</h2>
           <p>
-            Student officers who will act as gatekeepers. Pick at least one.
+            Optional. Student officers who have a permanent organizer account and will
+            act as gatekeepers, for every event they are assigned to. Skip this if a
+            temporary organizer below will run the scanner — you need at least one of
+            the two.
           </p>
           {loading ? (
             <p style={{ margin: 0, color: "var(--mu)" }}>Loading organizers…</p>
           ) : organizers.length === 0 ? (
             <p style={{ margin: 0, color: "var(--mu)" }}>
-              No organizer accounts found. Add organizers first.
+              No organizer accounts exist. Use a temporary organizer below.
             </p>
           ) : (
             <div className="orgs">
@@ -586,9 +594,10 @@ export default function CreateEventPage({ toast }) {
         <div className="card">
           <h2>Temporary organizers</h2>
           <p>
-            Optional. A student who runs the scanner for this event keeps their student
-            account, personal QR and history. Access ends one hour after the event and
-            can be revoked at any time.
+            A student who runs the scanner for this event only. They keep their student
+            account, personal QR and history, so this suits council officers handling a
+            single event. Access ends one hour after the event and can be revoked at any
+            time.
           </p>
 
           <div

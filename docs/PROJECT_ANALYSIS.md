@@ -88,7 +88,7 @@ temporary password or one-time code and force a password change on first login.
 | EVT-01 | Admin can create an event with name, description, venue, date, start/end time, grace period, scan mode, and QR refresh interval. |
 | EVT-02 | Admin can edit a draft/scheduled event and cancel an event. |
 | EVT-03 | Admin selects the audience by program and (recommended) year level. An empty audience means all programs. |
-| EVT-04 | Admin assigns one or more organizers to an event. Only assigned organizers (or admins) can gatekeeper-scan that event. |
+| EVT-04 | Admin assigns one or more organizers to an event, or names a temporary organizer instead. Only assigned organizers, temporary grant-holders (or admins) can gatekeeper-scan that event. |
 | EVT-05 | Admin can open a display terminal that continuously issues event tokens for self-service or dual mode. |
 | EVT-06 | Admin can close an event. Closing generates Absent records for enrolled students and stores a summary. |
 
@@ -175,6 +175,8 @@ temporary password or one-time code and force a password change on first login.
     so the account stays a student. It expires at event end + 60 minutes
     (`Asia/Manila`), is re-checked on every request instead of by a scheduled job,
     and the grant-holder cannot scan their own personal QR at their own gate.
+    A gatekeeper-mode event may run on a temporary organizer alone; the create form
+    only refuses an event with neither a permanent organizer nor a temporary one.
 
 ---
 

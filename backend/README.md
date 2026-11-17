@@ -159,6 +159,10 @@ the grant is **event-scoped** instead:
   returns only events with an active grant and includes `grant_expires_at`.
 - A grant-holder cannot record their own attendance through their own scanner
   (`reason: "self_scan"`).
+- A gatekeeper-mode event does **not** need a permanent organizer. The create form
+  accepts a temporary organizer alone (`event_organizers` empty, one grant), which
+  suits a council officer covering a single event; it only refuses an event with
+  neither. `canScan()` does not care which of the two paths granted access.
 
 Until `0008` is applied, these endpoints answer
 `503 { code: "migration_required" }`, `canScan()` ignores grants, and the
