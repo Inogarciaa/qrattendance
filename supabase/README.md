@@ -15,10 +15,11 @@ This folder defines the database only; the API in `backend/` talks to it.
 | `migrations/0006_geofence.sql` | venue coordinates on `events`, location evidence on `attendance` |
 | `migrations/0007_avatars.sql` | public `avatars` storage bucket for optional profile photos |
 | `migrations/0008_temp_organizers.sql` | event-scoped gatekeeper grants (`event_temp_organizers`) and student requests (`organizer_requests`) |
+| `migrations/0009_officer_groups.sql` | saved officer groups (`officer_groups`, `officer_group_members`) for one-step gatekeeper assignment |
 | `seed.sql` | default programs (SBIT, ARFIEN, SSLATE, SHTM) |
-| `apply_all.sql` | all eight migrations + `seed.sql` in one paste-and-run script |
+| `apply_all.sql` | all nine migrations + `seed.sql` in one paste-and-run script |
 
-Apply in order (`0001` → `0002` → `0003` → `0004` → `0005` → `0006` → `0007` → `0008` → `seed.sql`)
+Apply in order (`0001` → `0002` → `0003` → `0004` → `0005` → `0006` → `0007` → `0008` → `0009` → `seed.sql`)
 in the Supabase SQL editor, or via the Supabase CLI:
 
 ```bash
@@ -28,11 +29,11 @@ supabase db push
 `apply_all.sql` is the fastest path for a fresh project: open the SQL editor, paste the
 whole file, run it once. All statements are idempotent, so re-running is safe.
 
-> **Next migration:** `0009_alignment.sql` is planned. It should add token hashing,
+> **Next migration:** `0010_alignment.sql` is planned. It should add token hashing,
 > year-level audiences, `report_exports`, and `audit_logs`. See `docs/DATA_MODEL.md`.
 
 Restart the API after applying a migration that adds a column or table (`0004`, `0005`,
-`0006`, `0008`).
+`0006`, `0008`, `0009`).
 PostgREST caches the table schema, so new columns stay invisible to the API until
 its connection is recreated.
 

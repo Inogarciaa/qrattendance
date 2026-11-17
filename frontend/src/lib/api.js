@@ -161,6 +161,39 @@ export function decideOrganizerRequest(id, approved) {
   });
 }
 
+/* ----------------------------------------- saved officer groups (0009) */
+
+export function fetchOfficerGroups() {
+  return request("/admin/officer-groups");
+}
+
+export function createOfficerGroup({ name, note = "", profileIds = [] }) {
+  return request("/admin/officer-groups", {
+    method: "POST",
+    body: { name, note, profile_ids: profileIds },
+  });
+}
+
+export function updateOfficerGroup(id, { name, note, profileIds } = {}) {
+  const body = {};
+  if (name !== undefined) body.name = name;
+  if (note !== undefined) body.note = note;
+  if (profileIds !== undefined) body.profile_ids = profileIds;
+  return request(`/admin/officer-groups/${id}`, { method: "PUT", body });
+}
+
+export function deleteOfficerGroup(id) {
+  return request(`/admin/officer-groups/${id}`, { method: "DELETE" });
+}
+
+/** Gives every member of a group temporary gatekeeper access to one event. */
+export function addTempOrganizerGroup(eventId, groupId) {
+  return request(`/admin/events/${eventId}/temp-organizers/group`, {
+    method: "POST",
+    body: { group_id: groupId },
+  });
+}
+
 export function fetchReports(filters = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {

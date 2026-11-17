@@ -5,9 +5,11 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import Avatar from "../../components/ui/Avatar";
 import {
   addTempOrganizer,
+  addTempOrganizerGroup,
   fetchEvent,
   fetchEvents,
   fetchLiveDashboard,
+  fetchOfficerGroups,
   fetchReports,
   fetchTempOrganizers,
   removeTempOrganizer,
@@ -80,6 +82,9 @@ export default function DashboardPage({ onNavigate }) {
   const [accessSearching, setAccessSearching] = useState(false);
   const [accessBusyId, setAccessBusyId] = useState("");
   const [accessError, setAccessError] = useState("");
+  const [officerGroups, setOfficerGroups] = useState([]);
+  const [groupChoice, setGroupChoice] = useState("");
+  const [groupBusy, setGroupBusy] = useState(false);
 
   const load = useCallback(async () => {
     const [liveData, eventData] = await Promise.all([
@@ -167,8 +172,42 @@ export default function DashboardPage({ onNavigate }) {
     setAccessOpen(false);
     setAccessQuery("");
     setAccessResults([]);
+    setGroupChoice("");
     loadTempOrganizers(activeId);
   }, [activeId, loadTempOrganizers]);
+
+  // Groups are optional: a project without migration 0009 just shows no picker.
+  useEffect(() => {
+    let active = true;
+
+    fetchOfficerGroups()
+      .then((data) => {
+        if (active) setOfficerGroups(data.groups || []);
+      })
+      .catch(() => {
+        if (active) setOfficerGroups([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const grantGroupAccess = async () => {
+    if (!activeId || !groupChoice) return;
+
+    setGroupBusy(true);
+    setAccessError("");
+    try {
+      await addTempOrganizerGroup(activeId, groupChoice);
+      setGroupChoice("");
+      await loadTempOrganizers(activeId);
+    } catch (err) {
+      setAccessError(err.message || "Could not add the group.");
+    } finally {
+      setGroupBusy(false);
+    }
+  };
 
   const searchAccessCandidates = async () => {
     const q = accessQuery.trim();
@@ -604,6 +643,43 @@ export default function DashboardPage({ onNavigate }) {
 
               {accessOpen && (
                 <div style={{ marginBottom: 14 }}>
+                  {officerGroups.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        alignItems: "flex-end",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <div style={{ flex: "1 1 240px" }}>
+                        <Field id="access-group" label="Add a saved group">
+                          <select
+                            id="access-group"
+                            value={groupChoice}
+                            onChange={(event) => setGroupChoice(event.target.value)}
+                          >
+                            <option value="">Select a group</option>
+                            {officerGroups.map((group) => (
+                              <option key={group.id} value={group.id}>
+                                {group.name} ({group.members?.length || 0})
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={grantGroupAccess}
+                        disabled={groupBusy || !groupChoice}
+                      >
+                        {groupBusy ? "Adding…" : "Add group"}
+                      </button>
+                    </div>
+                  )}
+
                   <div
                     style={{
                       display: "flex",

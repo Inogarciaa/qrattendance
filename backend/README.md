@@ -82,12 +82,13 @@ disabled, so polling clients always see fresh attendance instead of a 304.
    - `supabase/migrations/0006_geofence.sql`
    - `supabase/migrations/0007_avatars.sql`
    - `supabase/migrations/0008_temp_organizers.sql`
+   - `supabase/migrations/0009_officer_groups.sql`
    - `supabase/seed.sql`
 
-   Or paste the combined `supabase/apply_all.sql` once — it contains all eight
+   Or paste the combined `supabase/apply_all.sql` once — it contains all nine
    migrations plus the seed programs.
 
-   Restart the API after applying `0005`/`0006`/`0008`: PostgREST caches the
+   Restart the API after applying `0005`/`0006`/`0008`/`0009`: PostgREST caches the
    table/column list, so new ones are invisible until the connection is
    recreated. (The API also degrades gracefully meanwhile — see *Migrations are
    optional* below.)

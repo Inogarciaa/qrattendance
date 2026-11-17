@@ -73,4 +73,21 @@ const hasTempOrganizerTables = columnProbe({
   enabled: "temporary organizer access is enabled",
 });
 
-module.exports = { hasApprovalColumn, hasGeofenceColumns, hasTempOrganizerTables };
+/**
+ * Migration 0009 adds the saved officer groups. Until it is applied, the group
+ * pickers stay hidden and adding a group answers 503; adding students one by one
+ * keeps working.
+ */
+const hasOfficerGroupTables = columnProbe({
+  table: "officer_groups",
+  column: "name",
+  migration: "0009_officer_groups.sql",
+  enabled: "saved officer groups are enabled",
+});
+
+module.exports = {
+  hasApprovalColumn,
+  hasGeofenceColumns,
+  hasTempOrganizerTables,
+  hasOfficerGroupTables,
+};

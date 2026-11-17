@@ -91,6 +91,7 @@ temporary password or one-time code and force a password change on first login.
 | EVT-04 | Admin assigns one or more organizers to an event, or names a temporary organizer instead. Only assigned organizers, temporary grant-holders (or admins) can gatekeeper-scan that event. |
 | EVT-05 | Admin can open a display terminal that continuously issues event tokens for self-service or dual mode. |
 | EVT-06 | Admin can close an event. Closing generates Absent records for enrolled students and stores a summary. |
+| EVT-07 | Admin can save a named group of student officers once, then add the whole group as temporary gatekeepers in one step. Membership is copied at that moment, so editing the group later does not change events that already have access. |
 
 ### 3.3 Mobile — student
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Field from "../../components/ui/Field";
 import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
-import { createEvent, fetchOrganizers, fetchPrograms, searchStudents } from "../../lib/api";
+import { createEvent, fetchOfficerGroups, fetchOrganizers, fetchPrograms, searchStudents } from "../../lib/api";
 import { formatTime, toMinutes } from "../../lib/format";
 import LocationPicker from "./LocationPicker";
 
@@ -61,6 +61,8 @@ export default function CreateEventPage({ toast }) {
   const [tempResults, setTempResults] = useState([]);
   const [tempSearching, setTempSearching] = useState(false);
   const [tempSelected, setTempSelected] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [groupChoice, setGroupChoice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -76,6 +78,24 @@ export default function CreateEventPage({ toast }) {
       })
       .finally(() => {
         if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Saved officer groups are optional, and missing until migration 0009 is
+  // applied, so a failure here must not block the form.
+  useEffect(() => {
+    let active = true;
+
+    fetchOfficerGroups()
+      .then((data) => {
+        if (active) setGroups(data.groups || []);
+      })
+      .catch(() => {
+        if (active) setGroups([]);
       });
 
     return () => {
@@ -130,6 +150,18 @@ export default function CreateEventPage({ toast }) {
 
   const removeTempOrganizer = (id) => {
     setTempSelected((current) => current.filter((row) => row.id !== id));
+  };
+
+  const addGroupMembers = () => {
+    const group = groups.find((row) => row.id === groupChoice);
+    if (!group) return;
+
+    setTempSelected((current) => {
+      const seen = new Set(current.map((row) => row.id));
+      const additions = (group.members || []).filter((member) => !seen.has(member.id));
+      return additions.length ? [...current, ...additions] : current;
+    });
+    setGroupChoice("");
   };
 
   const selfService = form.mode === "self_service";
@@ -599,6 +631,43 @@ export default function CreateEventPage({ toast }) {
             single event. Access ends one hour after the event and can be revoked at any
             time.
           </p>
+
+          {groups.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "flex-end",
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ flex: "1 1 260px" }}>
+                <Field id="temp-group" label="Add a saved group">
+                  <select
+                    id="temp-group"
+                    value={groupChoice}
+                    onChange={(event) => setGroupChoice(event.target.value)}
+                  >
+                    <option value="">Select a group</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name} ({group.members?.length || 0})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <button
+                type="button"
+                className="btn"
+                onClick={addGroupMembers}
+                disabled={!groupChoice}
+              >
+                Add group
+              </button>
+            </div>
+          )}
 
           <div
             style={{

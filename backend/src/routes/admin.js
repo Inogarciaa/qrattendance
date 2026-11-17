@@ -4,7 +4,7 @@ const { toEmail, buildPassword, toBirthdate } = require("../lib/password");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { isLocalMode } = require("../lib/mode");
 const { listAccounts } = require("../lib/local-db");
-const { hasApprovalColumn, hasTempOrganizerTables } = require("../lib/schema");
+const { hasApprovalColumn, hasTempOrganizerTables, hasOfficerGroupTables } = require("../lib/schema");
 const { organizerGrantExpiry } = require("../lib/clock");
 const { getEvent } = require("../services/attendance");
 
@@ -397,6 +397,239 @@ router.delete("/events/:id/temp-organizers/:profileId", async (req, res) => {
   if (error) throw error;
 
   res.json({ ok: true });
+});
+
+/* ------------------------------------------- saved officer groups (0009) */
+
+async function groupsReady(res) {
+  if (isLocalMode) {
+    res.status(501).json({ error: "Saved officer groups need Supabase mode" });
+    return false;
+  }
+  if (!(await hasOfficerGroupTables())) {
+    res.status(503).json({
+      error: "Saved officer groups need migration 0009_officer_groups.sql",
+      code: "migration_required",
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Only active student accounts can be members, because membership becomes a
+ * temporary organizer grant. Unknown or non-student ids are dropped instead of
+ * failing the whole save.
+ */
+async function studentIdsOnly(ids) {
+  const unique = [...new Set((Array.isArray(ids) ? ids : []).map(String).filter(Boolean))];
+  if (!unique.length) return [];
+
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, role, is_active")
+    .in("id", unique);
+  if (error) throw error;
+
+  const allowed = new Set(
+    (data || [])
+      .filter((row) => row.role === "student" && row.is_active)
+      .map((row) => row.id)
+  );
+  return unique.filter((id) => allowed.has(id));
+}
+
+const GROUP_MEMBER_FIELDS =
+  "id, school_id, full_name, photo_url, program:programs(id, code, name)";
+
+async function loadGroup(groupId) {
+  const { data, error } = await admin
+    .from("officer_groups")
+    .select(
+      `id, name, note, created_at, members:officer_group_members(profile:profiles!profile_id(${GROUP_MEMBER_FIELDS}))`
+    )
+    .eq("id", groupId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    ...data,
+    members: (data.members || [])
+      .map((row) => row.profile)
+      .filter(Boolean)
+      .sort((a, b) => a.full_name.localeCompare(b.full_name)),
+  };
+}
+
+router.get("/officer-groups", async (req, res) => {
+  if (!(await groupsReady(res))) return;
+
+  const { data, error } = await admin
+    .from("officer_groups")
+    .select(
+      `id, name, note, created_at, members:officer_group_members(profile:profiles!profile_id(${GROUP_MEMBER_FIELDS}))`
+    )
+    .order("name", { ascending: true });
+  if (error) throw error;
+
+  const groups = (data || []).map((group) => ({
+    ...group,
+    members: (group.members || [])
+      .map((row) => row.profile)
+      .filter(Boolean)
+      .sort((a, b) => a.full_name.localeCompare(b.full_name)),
+  }));
+
+  res.json({ groups });
+});
+
+router.post("/officer-groups", async (req, res) => {
+  if (!(await groupsReady(res))) return;
+
+  const name = String(req.body?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name is required" });
+
+  const memberIds = await studentIdsOnly(req.body?.profile_ids);
+
+  const { data: group, error } = await admin
+    .from("officer_groups")
+    .insert({
+      name,
+      note: req.body?.note ? String(req.body.note).trim() : null,
+      created_by: req.user.id,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "A group with that name already exists" });
+    }
+    throw error;
+  }
+
+  if (memberIds.length) {
+    const { error: memberError } = await admin
+      .from("officer_group_members")
+      .insert(memberIds.map((profile_id) => ({ group_id: group.id, profile_id })));
+    if (memberError) throw memberError;
+  }
+
+  res.status(201).json({ group: await loadGroup(group.id) });
+});
+
+router.put("/officer-groups/:id", async (req, res) => {
+  if (!(await groupsReady(res))) return;
+
+  const patch = {};
+  if (req.body?.name !== undefined) {
+    const name = String(req.body.name).trim();
+    if (!name) return res.status(400).json({ error: "name cannot be empty" });
+    patch.name = name;
+  }
+  if (req.body?.note !== undefined) {
+    patch.note = req.body.note ? String(req.body.note).trim() : null;
+  }
+
+  // PostgREST rejects an empty update payload, so a members-only PUT skips it.
+  if (Object.keys(patch).length) {
+    const { error } = await admin.from("officer_groups").update(patch).eq("id", req.params.id);
+    if (error) {
+      if (error.code === "23505") {
+        return res.status(409).json({ error: "A group with that name already exists" });
+      }
+      throw error;
+    }
+  }
+
+  if (Array.isArray(req.body?.profile_ids)) {
+    const memberIds = await studentIdsOnly(req.body.profile_ids);
+    const { error: clearError } = await admin
+      .from("officer_group_members")
+      .delete()
+      .eq("group_id", req.params.id);
+    if (clearError) throw clearError;
+
+    if (memberIds.length) {
+      const { error: memberError } = await admin
+        .from("officer_group_members")
+        .insert(memberIds.map((profile_id) => ({ group_id: req.params.id, profile_id })));
+      if (memberError) throw memberError;
+    }
+  }
+
+  const group = await loadGroup(req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  res.json({ group });
+});
+
+router.delete("/officer-groups/:id", async (req, res) => {
+  if (!(await groupsReady(res))) return;
+
+  const { error } = await admin.from("officer_groups").delete().eq("id", req.params.id);
+  if (error) throw error;
+
+  res.json({ ok: true });
+});
+
+/**
+ * Adds every active student member of a group as a temporary gatekeeper for one
+ * event. Membership is copied, not linked: editing the group later leaves this
+ * event alone, and the usual event-end expiry applies.
+ */
+router.post("/events/:id/temp-organizers/group", async (req, res) => {
+  if (!(await tempTablesReady(res))) return;
+
+  const groupId = req.body?.group_id;
+  if (!groupId) return res.status(400).json({ error: "group_id is required" });
+
+  const event = await getEvent(req.params.id);
+  if (!event) return res.status(404).json({ error: "Event not found" });
+
+  const expiresAt = organizerGrantExpiry(event);
+  if (!expiresAt) {
+    return res.status(400).json({ error: "Set the event date and end time before granting access" });
+  }
+
+  const { data: group, error: groupError } = await admin
+    .from("officer_groups")
+    .select("id, name")
+    .eq("id", groupId)
+    .maybeSingle();
+  if (groupError) throw groupError;
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const { data: members, error: memberError } = await admin
+    .from("officer_group_members")
+    .select("profile:profiles!profile_id(id, role, is_active)")
+    .eq("group_id", groupId);
+  if (memberError) throw memberError;
+
+  const eligible = (members || [])
+    .map((row) => row.profile)
+    .filter((profile) => profile && profile.role === "student" && profile.is_active)
+    .map((profile) => profile.id);
+
+  if (!eligible.length) {
+    return res.status(400).json({ error: "That group has no active student members" });
+  }
+
+  const { error: grantError } = await admin.from("event_temp_organizers").upsert(
+    eligible.map((profile_id) => ({
+      event_id: event.id,
+      profile_id,
+      expires_at: expiresAt.toISOString(),
+      granted_by: req.user.id,
+    })),
+    { onConflict: "event_id,profile_id" }
+  );
+  if (grantError) throw grantError;
+
+  res.status(201).json({
+    group: { id: group.id, name: group.name },
+    granted: eligible.length,
+    expires_at: expiresAt.toISOString(),
+  });
 });
 
 /** Student requests waiting for a decision. */
