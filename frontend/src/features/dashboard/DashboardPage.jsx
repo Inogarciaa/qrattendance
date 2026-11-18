@@ -526,7 +526,7 @@ export default function DashboardPage({ onNavigate }) {
                 fontSize: 13,
               }}
             >
-              No events have been created yet.
+              Nothing scheduled for today or later.
             </div>
           )}
 
