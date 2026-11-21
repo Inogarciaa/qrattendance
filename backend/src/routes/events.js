@@ -642,7 +642,6 @@ const GATEKEEPER_LIMIT = 25;
 /** Staff may manage any event; an organizer only events they are assigned to. */
 async function canManageGatekeepers(user, eventId) {
   if (user.role === "admin" || user.role === "superadmin") return true;
-  if (user.role !== "organizer") return false;
 
   const { data, error } = await admin
     .from("event_organizers")
