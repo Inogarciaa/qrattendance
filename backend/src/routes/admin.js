@@ -708,3 +708,105 @@ router.patch("/organizer-requests/:id", async (req, res) => {
 });
 
 module.exports = router;
+
+/* ------------------------------------------- create admin staff */
+
+router.get('/staff', requireAuth, requireRole('superadmin'), async (req, res) => {
+  if (isLocalMode) return res.json({ staff: [] });
+  const { data, error } = await admin
+    .from('profiles')
+    .select('id, school_id, full_name, email, role, created_at, is_active')
+    .in('role', ['admin', 'superadmin'])
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  res.json({ staff: data || [] });
+});
+
+router.post('/staff', requireAuth, requireRole('superadmin'), async (req, res) => {
+  if (isLocalMode) {
+    return res.status(501).json({ error: 'Staff account creation is not available in local mode' });
+  }
+
+  const { full_name, email, password } = req.body || {};
+
+  if (!full_name || !email || !password) {
+    return res.status(400).json({ error: 'full_name, email, and password are required' });
+  }
+
+  const trimmedName = String(full_name).trim();
+  const trimmedEmail = String(email).trim().toLowerCase();
+
+  if (trimmedName.split(/\s+/).length < 2) {
+    return res.status(400).json({ error: 'Please enter full name (first and last name)' });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  if (String(password).length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  // Generate next available ADMIN-#### school_id
+  const { data: existingStaff } = await admin
+    .from('profiles')
+    .select('school_id')
+    .like('school_id', 'ADMIN-%');
+
+  const existingNums = (existingStaff || [])
+    .map((p) => parseInt(p.school_id.replace('ADMIN-', ''), 10))
+    .filter((n) => !isNaN(n));
+
+  const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : 0;
+  const nextNum = maxNum + 1;
+  const schoolId = `ADMIN-${String(nextNum).padStart(4, '0')}`;
+
+  // Create Auth User
+  const { data: authData, error: authError } = await admin.auth.admin.createUser({
+    email: trimmedEmail,
+    password: String(password),
+    email_confirm: true,
+    user_metadata: { school_id: schoolId, full_name: trimmedName, role: 'admin' },
+  });
+
+  if (authError) {
+    return res.status(400).json({ error: authError.message });
+  }
+
+  // Create Profile
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .upsert(
+      {
+        id: authData.user.id,
+        school_id: schoolId,
+        full_name: trimmedName,
+        email: trimmedEmail,
+        role: 'admin',
+        is_active: true,
+        approved_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    )
+    .select('id, school_id, full_name, email, role, created_at')
+    .single();
+
+  if (profileError) {
+    // Rollback auth user
+    await admin.auth.admin.deleteUser(authData.user.id);
+    return res.status(500).json({ error: profileError.message });
+  }
+
+  // Audit Log
+  await admin.from('audit_log').insert({
+    actor_id: req.user.id,
+    action: 'staff_create',
+    entity: 'profile',
+    entity_id: profile.id,
+    meta: { email: trimmedEmail, role: 'admin', school_id: schoolId },
+  });
+
+  res.status(201).json({ staff: profile });
+});
