@@ -645,3 +645,26 @@ export async function selfCheckIn({ eventId, token, location = null }) {
 export async function fetchHealth() {
   return request("/health", { auth: false });
 }
+
+/* ------------------------------------------------------ organizer gatekeepers */
+
+export async function getGatekeepers(eventId) {
+  return request(`/events/${eventId}/gatekeepers`);
+}
+
+export async function searchGatekeeperCandidates(eventId, query) {
+  return request(`/events/${eventId}/gatekeeper-candidates?q=${encodeURIComponent(query)}`);
+}
+
+export async function addGatekeeper(eventId, profileId) {
+  return request(`/events/${eventId}/gatekeepers`, {
+    method: "POST",
+    body: { profile_id: profileId },
+  });
+}
+
+export async function removeGatekeeper(eventId, profileId) {
+  return request(`/events/${eventId}/gatekeepers/${profileId}`, {
+    method: "DELETE",
+  });
+}

@@ -77,7 +77,6 @@ export default function OrganizerEventsScreen() {
   );
 
   const liveCount = events.filter((event) => event.status === "live").length;
-  const checkedIn = events.reduce((sum, event) => sum + event.present + event.late, 0);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -97,11 +96,6 @@ export default function OrganizerEventsScreen() {
           <View style={styles.headerStat}>
             <Text style={styles.headerStatValue}>{liveCount}</Text>
             <Text style={styles.headerStatLabel}>Live</Text>
-          </View>
-          <View style={styles.headerDivider} />
-          <View style={styles.headerStat}>
-            <Text style={styles.headerStatValue}>{checkedIn}</Text>
-            <Text style={styles.headerStatLabel}>Checked in</Text>
           </View>
           <View style={styles.headerDivider} />
           <View style={styles.headerStat}>
@@ -163,14 +157,14 @@ export default function OrganizerEventsScreen() {
               }
             />
           }
-          renderItem={({ item }) => <EventCard event={item} onPress={() => openEvent(item)} />}
+          renderItem={({ item }) => <EventCard event={item} onPress={() => openEvent(item)} router={router} />}
         />
       )}
     </View>
   );
 }
 
-function EventCard({ event, onPress }) {
+function EventCard({ event, onPress, router }) {
   const live = event.status === "live";
   const total = event.enrolled || 1;
   const progress = Math.min(100, Math.round(((event.present + event.late) / total) * 100));
@@ -226,6 +220,16 @@ function EventCard({ event, onPress }) {
             <Text style={styles.scanCtaText}>Open scanner</Text>
           </View>
         ) : null}
+
+        <Pressable
+          onPress={() => router.push({ pathname: "/(organizer)/gatekeepers", params: { eventId: event.id } })}
+          style={styles.gatekeepersBtn}
+          accessibilityRole="button"
+          accessibilityLabel={`Manage gatekeepers for ${event.title}`}
+        >
+          <Ionicons name="people-outline" size={14} color={colors.brand} />
+          <Text style={styles.gatekeepersBtnText}>Gatekeepers</Text>
+        </Pressable>
       </Card>
     </Pressable>
   );
@@ -395,6 +399,24 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   scanCtaText: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.brand,
+  },
+  gatekeepersBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  gatekeepersBtnText: {
     flex: 1,
     fontFamily: fonts.semibold,
     fontSize: 12,
