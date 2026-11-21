@@ -118,6 +118,7 @@ router.get("/organizers", async (req, res) => {
     .select("id, school_id, full_name, program:programs(id, code, name)")
     .eq("role", "organizer")
     .eq("is_active", true)
+    .is("deleted_at", null)
     .order("full_name");
   if (error) throw error;
   res.json({ organizers: data });
