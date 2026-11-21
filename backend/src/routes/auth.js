@@ -17,7 +17,7 @@ const PHOTO_EXTENSIONS = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png":
 const PHOTO_MAX_BYTES = 3 * 1024 * 1024;
 
 const PROFILE_SELECT =
-  "id, school_id, full_name, role, program_id, year_level, photo_url, is_active, email, program:programs(id, code, name)";
+  "id, school_id, full_name, role, program_id, year_level, photo_url, is_active, email, deleted_at, program:programs(id, code, name)";
 
 function sessionResponse(user, session) {
   return {
@@ -30,6 +30,7 @@ function sessionResponse(user, session) {
 
 function accountState(profile) {
   if (!profile) return "onboarding";
+  if (profile.deleted_at) return "archived";
   if (!profile.is_active && !profile.approved_at) return "pending";
   if (!profile.is_active) return "disabled";
   return "ready";
@@ -126,6 +127,9 @@ function respondWithProfile(res, profile, data) {
       code: "profile_missing",
     });
   }
+  if (profile.deleted_at) {
+    return res.status(403).json({ error: "Account archived", code: "account_archived" });
+  }
   if (!profile.is_active && !profile.approved_at) {
     return res.status(403).json({
       error: "Your account is waiting for admin approval",
@@ -160,6 +164,11 @@ router.post("/refresh", async (req, res) => {
   const { data, error } = await anon.auth.refreshSession({ refresh_token });
   if (error || !data?.session) {
     return res.status(401).json({ error: "Unable to refresh session" });
+  }
+
+  const profile = await loadProfile(data.session.user.id);
+  if (profile?.deleted_at) {
+    return res.status(403).json({ error: "Account archived", code: "account_archived" });
   }
 
   res.json({

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Icon from "../components/ui/Icon";
 import Avatar from "../components/ui/Avatar";
+import ArchivePage from "../features/archive/ArchivePage";
 import CreateEventPage from "../features/events/CreateEventPage";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import ApprovalsPage from "../features/approvals/ApprovalsPage";
@@ -17,6 +18,7 @@ const MAIN_NAV = [
   { label: "Create Event", icon: "cal" },
   { label: "Students", icon: "usr" },
   { label: "Approvals", icon: "uc" },
+  { label: "Archive", icon: "arc", superadminOnly: true },
 ];
 
 const GENERAL_NAV = [
@@ -116,15 +118,42 @@ export default function App() {
     return <LoginPage onLogin={handleLogin} />;
   }
 
+  const isSuperadmin = user.role === "superadmin";
+  const isStaff = isSuperadmin || user.role === "admin";
+
+  if (!isStaff) {
+    return (
+      <div className="app out">
+        <div className="card done">
+          <h2 style={{ fontSize: 18 }}>Staff access only</h2>
+          <p style={{ margin: "4px 0 16px" }}>
+            The web dashboard is for administrators. Students and organizers use the
+            LacoQR mobile app to check in and scan.
+          </p>
+          <button type="button" className="btn p" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const mainNav = MAIN_NAV.filter((item) => !item.superadminOnly || isSuperadmin);
+
   const pages = {
-    Dashboard: <DashboardPage onNavigate={navigate} />,
+    Dashboard: <DashboardPage onNavigate={navigate} user={user} />,
     Reports: <ReportsPage toast={setToastMessage} />,
     "Create Event": <CreateEventPage toast={setToastMessage} />,
-    Students: <SearchStudentsPage />,
+    Students: <SearchStudentsPage user={user} />,
     Approvals: <ApprovalsPage />,
+    Archive: <ArchivePage toast={setToastMessage} />,
     Settings: (
       <SettingsPage
-        user={{ name: user.full_name, email: user.email }}
+        user={{
+          name: user.full_name,
+          email: user.email,
+          role: user.role,
+        }}
         setUser={(next) =>
           setUser({ ...user, full_name: next.name, email: next.email })
         }
@@ -145,7 +174,7 @@ export default function App() {
             LacoQR
           </div>
           <div className="grp">Menu</div>
-          {MAIN_NAV.map(renderNavItem)}
+          {mainNav.map(renderNavItem)}
           <div className="grp">General</div>
           {GENERAL_NAV.map(renderNavItem)}
         </div>
@@ -193,7 +222,11 @@ export default function App() {
           </div>
         </header>
         <main className="content">
-          <div className="inner">{pages[page] ?? pages.Dashboard}</div>
+          <div className="inner">
+            {page === "Archive" && !isSuperadmin
+              ? pages.Dashboard
+              : pages[page] ?? pages.Dashboard}
+          </div>
         </main>
       </div>
 

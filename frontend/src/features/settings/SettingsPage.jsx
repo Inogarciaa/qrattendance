@@ -1,16 +1,31 @@
 import { useEffect, useState } from "react";
+import DataTable from "../../components/ui/DataTable";
 import Field from "../../components/ui/Field";
 import PageHeader from "../../components/ui/PageHeader";
 import { SCAN_MODES } from "../../lib/demo-data";
 import {
   createOfficerGroup,
+  createStaffAccount,
   deleteOfficerGroup,
   fetchOfficerGroups,
+  fetchStaff,
   searchStudents,
   updateOfficerGroup,
 } from "../../lib/api";
 
+function addedLabel(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export default function SettingsPage({ user, setUser, toast }) {
+  const isSuperadmin = user?.role === "superadmin";
   const [form, setForm] = useState({
     ...user,
     grace: "15",
@@ -29,6 +44,73 @@ export default function SettingsPage({ user, setUser, toast }) {
   const [memberResults, setMemberResults] = useState([]);
   const [memberSearching, setMemberSearching] = useState(false);
   const [groupBusy, setGroupBusy] = useState(false);
+
+  const [staff, setStaff] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(isSuperadmin);
+  const [staffError, setStaffError] = useState("");
+  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "" });
+  const [staffBusy, setStaffBusy] = useState(false);
+  const [staffNotice, setStaffNotice] = useState(null);
+
+  useEffect(() => {
+    if (!isSuperadmin) return undefined;
+    let active = true;
+    fetchStaff()
+      .then((data) => {
+        if (active) setStaff(data.staff || []);
+      })
+      .catch((err) => {
+        if (active) setStaffError(err.message || "Could not load staff accounts.");
+      })
+      .finally(() => {
+        if (active) setStaffLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isSuperadmin]);
+
+  const createStaff = async () => {
+    if (staffBusy) return;
+
+    const name = staffForm.name.trim();
+    const email = staffForm.email.trim();
+    const password = staffForm.password;
+
+    if (name.split(/\s+/).length < 2) {
+      setStaffError("Enter the admin's first and last name.");
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setStaffError("Enter a valid email address.");
+      return;
+    }
+    if (password.length < 8) {
+      setStaffError("The temporary password needs at least 8 characters.");
+      return;
+    }
+
+    setStaffBusy(true);
+    setStaffError("");
+    setStaffNotice(null);
+    try {
+      const data = await createStaffAccount({ fullName: name, email, password });
+      const created = data.staff;
+      setStaff((current) => [created, ...current]);
+      setStaffForm({ name: "", email: "", password: "" });
+      setStaffNotice({
+        name: created.full_name,
+        email: created.email,
+        password,
+        role: created.role,
+      });
+      toast("Admin account created.");
+    } catch (err) {
+      setStaffError(err.message || "Could not create the admin account.");
+    } finally {
+      setStaffBusy(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -157,7 +239,7 @@ export default function SettingsPage({ user, setUser, toast }) {
 
   const removeGroup = async (group) => {
     const confirmed = window.confirm(
-      `Delete the group “${group.name}”? Students already added to an event keep their access.`
+      `Archive the group “${group.name}”? It disappears from Settings, but a superadmin can restore it from the Archive page. Students already added to an event keep their access.`
     );
     if (!confirmed) return;
 
@@ -167,9 +249,9 @@ export default function SettingsPage({ user, setUser, toast }) {
       await deleteOfficerGroup(group.id);
       setGroups((current) => current.filter((row) => row.id !== group.id));
       if (editingId === group.id) resetGroupForm();
-      toast("Group deleted.");
+      toast("Group archived.");
     } catch (err) {
-      setGroupsError(err.message || "Could not delete the group.");
+      setGroupsError(err.message || "Could not archive the group.");
     } finally {
       setGroupBusy(false);
     }
@@ -239,6 +321,119 @@ export default function SettingsPage({ user, setUser, toast }) {
           </Field>
         </div>
       </div>
+
+      {isSuperadmin && (
+        <div className="card">
+          <h2>Staff accounts</h2>
+          <p>
+            Admins can create and edit events, students, and reports. They cannot
+            archive anything; only superadmins can archive or restore. Share the
+            temporary password over a secure channel.
+          </p>
+
+          <div className="g">
+            <Field id="staff-name" label="Full name">
+              <input
+                id="staff-name"
+                type="text"
+                placeholder="e.g. Maria Cruz"
+                value={staffForm.name}
+                onChange={(event) =>
+                  setStaffForm({ ...staffForm, name: event.target.value })
+                }
+              />
+            </Field>
+            <Field id="staff-email" label="Email">
+              <input
+                id="staff-email"
+                type="email"
+                placeholder="dean.cruz@laco.edu.ph"
+                value={staffForm.email}
+                onChange={(event) =>
+                  setStaffForm({ ...staffForm, email: event.target.value })
+                }
+              />
+            </Field>
+            <Field id="staff-password" label="Temporary password">
+              <input
+                id="staff-password"
+                type="password"
+                placeholder="At least 8 characters"
+                value={staffForm.password}
+                onChange={(event) =>
+                  setStaffForm({ ...staffForm, password: event.target.value })
+                }
+              />
+              <div className="hint">
+                There is no password-reset screen yet, so keep this somewhere safe
+                until the admin signs in.
+              </div>
+            </Field>
+          </div>
+
+          <div className="acts" style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn p"
+              onClick={createStaff}
+              disabled={staffBusy}
+            >
+              {staffBusy ? "Creating…" : "Create admin"}
+            </button>
+          </div>
+
+          {staffNotice && (
+            <div
+              className="card"
+              style={{ marginTop: 14, background: "var(--bg)", boxShadow: "none" }}
+            >
+              <strong>Account created.</strong> Share these credentials:
+              <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.8 }}>
+                <div>
+                  Name: <strong>{staffNotice.name}</strong>
+                </div>
+                <div>
+                  Email: <code>{staffNotice.email}</code>
+                </div>
+                <div>
+                  Temporary password: <code>{staffNotice.password}</code>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn"
+                style={{ marginTop: 10 }}
+                onClick={() => setStaffNotice(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {staffError && (
+            <p style={{ margin: "12px 0 0", color: "#dc2626", fontSize: 13 }} role="alert">
+              {staffError}
+            </p>
+          )}
+
+          <div style={{ marginTop: 16 }}>
+            {staffLoading ? (
+              <p style={{ margin: 0, color: "var(--mu)" }}>Loading staff…</p>
+            ) : (
+              <DataTable
+                columns={["Name", "Email", "Role", "Added"]}
+                rows={staff.map((person) => [
+                  person.full_name,
+                  person.email || "—",
+                  person.role,
+                  addedLabel(person.created_at),
+                ])}
+                emptyMessage="No staff accounts yet."
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h2>Officer groups</h2>
@@ -376,14 +571,16 @@ export default function SettingsPage({ user, setUser, toast }) {
                       <button type="button" className="btn" onClick={() => startEdit(group)}>
                         Edit
                       </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => removeGroup(group)}
-                        disabled={groupBusy}
-                      >
-                        Delete
-                      </button>
+                      {isSuperadmin && (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => removeGroup(group)}
+                          disabled={groupBusy}
+                        >
+                          Archive
+                        </button>
+                      )}
                     </div>
                   </div>
                   {group.members?.length ? (

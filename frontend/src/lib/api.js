@@ -204,3 +204,33 @@ export function fetchReports(filters = {}) {
   const query = params.toString();
   return request(`/reports${query ? `?${query}` : ""}`);
 }
+
+/* ------------------------------------- archive / restore (0011, superadmin) */
+
+/** entity is one of: events, students, groups. */
+export function fetchArchive(entity, query = "") {
+  const params = new URLSearchParams({ entity });
+  if (String(query).trim()) params.set("q", String(query).trim());
+  return request(`/admin/archive?${params.toString()}`);
+}
+
+export function archiveEntity(entity, id) {
+  return request(`/admin/archive/${entity}/${id}`, { method: "POST" });
+}
+
+export function restoreEntity(entity, id) {
+  return request(`/admin/archive/${entity}/${id}/restore`, { method: "POST" });
+}
+
+/* ------------------------------------------ staff accounts (superadmin) */
+
+export function fetchStaff() {
+  return request("/admin/staff");
+}
+
+export function createStaffAccount({ fullName, email, password }) {
+  return request("/admin/staff", {
+    method: "POST",
+    body: { full_name: fullName, email, password },
+  });
+}

@@ -3,7 +3,12 @@ import DataTable from "../../components/ui/DataTable";
 import Field from "../../components/ui/Field";
 import PageHeader from "../../components/ui/PageHeader";
 import Avatar from "../../components/ui/Avatar";
-import { fetchPrograms, fetchStudentAttendance, searchStudents } from "../../lib/api";
+import {
+  archiveEntity,
+  fetchPrograms,
+  fetchStudentAttendance,
+  searchStudents,
+} from "../../lib/api";
 
 function attendanceSummary(tally) {
   if (!tally) return "—";
@@ -16,13 +21,15 @@ function attendanceSummary(tally) {
   ].join(" · ");
 }
 
-export default function SearchStudentsPage() {
+export default function SearchStudentsPage({ user, toast }) {
+  const isSuperadmin = user?.role === "superadmin";
   const [filters, setFilters] = useState({ query: "", programId: "" });
   const [programs, setPrograms] = useState([]);
   const [results, setResults] = useState(null);
   const [history, setHistory] = useState({});
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState("");
 
   useEffect(() => {
     fetchPrograms()
@@ -67,7 +74,30 @@ export default function SearchStudentsPage() {
     runSearch(filters);
   };
 
-  const columns = ["Student", "ID number", "Email", "Program", "Attendance"];
+  const archiveStudent = async (student) => {
+    const confirmed = window.confirm(
+      `Archive ${student.full_name}? They will disappear from search and cannot sign in until a superadmin restores them. Attendance history is kept.`
+    );
+    if (!confirmed) return;
+
+    setBusyId(student.id);
+    setError("");
+    try {
+      await archiveEntity("students", student.id);
+      setResults((current) =>
+        (current || []).filter((row) => row.id !== student.id)
+      );
+      toast?.(`${student.full_name} archived.`);
+    } catch (err) {
+      setError(err.message || "Could not archive this student.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const columns = isSuperadmin
+    ? ["Student", "ID number", "Email", "Program", "Attendance", ""]
+    : ["Student", "ID number", "Email", "Program", "Attendance"];
 
   return (
     <>
@@ -135,16 +165,32 @@ export default function SearchStudentsPage() {
             </p>
             <DataTable
               columns={columns}
-              rows={results.map((student) => [
-                <span className="who" key={student.id}>
-                  <Avatar name={student.full_name} photoUrl={student.photo_url} />
-                  {student.full_name}
-                </span>,
-                student.school_id,
-                student.email || "—",
-                student.program?.code || "—",
-                attendanceSummary(history[student.id]),
-              ])}
+              rows={results.map((student) => {
+                const cells = [
+                  <span className="who" key={student.id}>
+                    <Avatar name={student.full_name} photoUrl={student.photo_url} />
+                    {student.full_name}
+                  </span>,
+                  student.school_id,
+                  student.email || "—",
+                  student.program?.code || "—",
+                  attendanceSummary(history[student.id]),
+                ];
+                if (isSuperadmin) {
+                  cells.push(
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ padding: "6px 12px", fontSize: 12 }}
+                      onClick={() => archiveStudent(student)}
+                      disabled={busyId === student.id}
+                    >
+                      {busyId === student.id ? "Archiving…" : "Archive"}
+                    </button>
+                  );
+                }
+                return cells;
+              })}
               emptyMessage="No students match these filters."
             />
           </>

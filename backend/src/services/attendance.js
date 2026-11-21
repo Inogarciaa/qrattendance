@@ -27,7 +27,12 @@ async function isEnrolled(eventId, programId) {
 }
 
 async function getEvent(eventId) {
-  const { data, error } = await admin.from("events").select("*").eq("id", eventId).maybeSingle();
+  const { data, error } = await admin
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .is("deleted_at", null)
+    .maybeSingle();
   if (error) throw error;
   return data;
 }

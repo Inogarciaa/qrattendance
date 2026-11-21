@@ -33,6 +33,8 @@ async function buildRows(filters) {
   let query = admin
     .from("attendance")
     .select(`${SELECT}${location}`)
+    .is("event.deleted_at", null)
+    .is("student.deleted_at", null)
     .order("scanned_at", { ascending: false });
 
   if (event_id) query = query.eq("event_id", event_id);

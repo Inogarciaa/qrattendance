@@ -6,6 +6,7 @@ const { isLiveWindow, organizerGrantExpiry } = require("../lib/clock");
 const { parseGeoInput } = require("../lib/geo");
 const { hasGeofenceColumns, hasTempOrganizerTables } = require("../lib/schema");
 const { getEvent, findGrant } = require("../services/attendance");
+const { writeAudit } = require("../lib/audit");
 const localDb = require("../lib/local-db");
 
 const router = express.Router();
@@ -81,7 +82,8 @@ async function audienceSize(programIds) {
     .from("profiles")
     .select("id", { count: "exact", head: true })
     .eq("role", "student")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .is("deleted_at", null);
   if (programIds.length) query = query.in("program_id", programIds);
   const { count, error } = await query;
   if (error) throw error;
@@ -149,9 +151,10 @@ router.get("/", requireAuth, async (req, res) => {
 
     const { data, error } = await admin
       .from("event_temp_organizers")
-      .select(`expires_at, event:events(${await eventFields()})`)
+      .select(`expires_at, event:events!inner(${await eventFields()})`)
       .eq("profile_id", req.user.id)
       .gt("expires_at", new Date().toISOString())
+      .is("event.deleted_at", null)
       .order("expires_at", { ascending: true });
     if (error) throw error;
 
@@ -165,13 +168,14 @@ router.get("/", requireAuth, async (req, res) => {
     return res.json({ events });
   }
 
-  let query = admin.from("events").select(`${await eventFields()}, event_organizers(profile_id), event_audiences(program_id)`).order("event_date", { ascending: false });
+  let query = admin.from("events").select(`${await eventFields()}, event_organizers(profile_id), event_audiences(program_id)`).is("deleted_at", null).order("event_date", { ascending: false });
 
   if (req.user.role === "organizer") {
     query = admin
       .from("events")
       .select(`${await eventFields()}, event_organizers!inner(profile_id), event_audiences(program_id)`)
       .eq("event_organizers.profile_id", req.user.id)
+      .is("deleted_at", null)
       .order("event_date", { ascending: false });
   } else if (req.user.role === "student") {
     // No !inner: an event without audience rows is open to every program and
@@ -179,6 +183,7 @@ router.get("/", requireAuth, async (req, res) => {
     query = admin
       .from("events")
       .select(`${await eventFields()}, event_organizers(profile_id), event_audiences(program_id)`)
+      .is("deleted_at", null)
       .order("event_date", { ascending: false });
   }
 
@@ -629,4 +634,226 @@ router.post("/:id/close", requireAuth, requireRole("admin"), async (req, res) =>
   res.json({ summary });
 });
 
+
+/* ---------------------------------------- organizer gatekeepers (0011) */
+
+const GATEKEEPER_LIMIT = 25;
+
+/** Staff may manage any event; an organizer only events they are assigned to. */
+async function canManageGatekeepers(user, eventId) {
+  if (user.role === "admin" || user.role === "superadmin") return true;
+  if (user.role !== "organizer") return false;
+
+  const { data, error } = await admin
+    .from("event_organizers")
+    .select("event_id")
+    .eq("event_id", eventId)
+    .eq("profile_id", user.id)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function gatekeeperEvent(req, res) {
+  if (!(await hasTempOrganizerTables())) {
+    res.status(503).json({
+      error: "Temporary organizer access needs migration 0008_temp_organizers.sql",
+      code: "migration_required",
+    });
+    return null;
+  }
+
+  const event = await getEvent(req.params.id);
+  if (!event) {
+    res.status(404).json({ error: "Event not found" });
+    return null;
+  }
+
+  if (!(await canManageGatekeepers(req.user, event.id))) {
+    res.status(403).json({
+      error: "Only the organizers assigned to this event can manage its gatekeepers",
+      code: "forbidden",
+    });
+    return null;
+  }
+
+  return event;
+}
+
+router.get("/:id/gatekeepers", requireAuth, async (req, res) => {
+  const event = await gatekeeperEvent(req, res);
+  if (!event) return;
+
+  const { data, error } = await admin
+    .from("event_temp_organizers")
+    .select(
+      "expires_at, created_at, granted_by, profile:profiles!profile_id!inner(id, school_id, full_name, photo_url, deleted_at, program:programs(id, code, name))"
+    )
+    .eq("event_id", event.id)
+    .gt("expires_at", new Date().toISOString())
+    .is("profile.deleted_at", null)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  res.json({ gatekeepers: data || [] });
+});
+
+router.get("/:id/gatekeeper-candidates", requireAuth, async (req, res) => {
+  const event = await gatekeeperEvent(req, res);
+  if (!event) return;
+
+  const term = String(req.query.q || "").trim();
+  if (term.length < 2) return res.json({ candidates: [] });
+
+  const escaped = term.replace(/[%,()]/g, "");
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, school_id, full_name, program:programs(id, code, name)")
+    .eq("role", "student")
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .or(`full_name.ilike.%${escaped}%,school_id.ilike.%${escaped}%`)
+    .limit(10);
+  if (error) throw error;
+
+  const [{ data: grants }, { data: organizers }] = await Promise.all([
+    admin
+      .from("event_temp_organizers")
+      .select("profile_id")
+      .eq("event_id", event.id)
+      .gt("expires_at", new Date().toISOString()),
+    admin.from("event_organizers").select("profile_id").eq("event_id", event.id),
+  ]);
+
+  const taken = new Set([
+    ...(grants || []).map((row) => row.profile_id),
+    ...(organizers || []).map((row) => row.profile_id),
+  ]);
+
+  res.json({
+    candidates: (data || []).filter((row) => !taken.has(row.id)),
+  });
+});
+
+router.post("/:id/gatekeepers", requireAuth, async (req, res) => {
+  const event = await gatekeeperEvent(req, res);
+  if (!event) return;
+
+  if (["completed", "cancelled"].includes(event.status)) {
+    return res.status(409).json({ error: "This event is already closed." });
+  }
+
+  const profileId = String(req.body?.profile_id || "");
+  if (!profileId) return res.status(400).json({ error: "profile_id is required" });
+  if (profileId === req.user.id) {
+    return res.status(400).json({ error: "You already have access to this event." });
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("id, role, is_active, deleted_at, full_name, school_id")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  if (!profile || profile.role !== "student" || !profile.is_active || profile.deleted_at) {
+    return res.status(400).json({ error: "Choose an active student account." });
+  }
+
+  const { data: permanent, error: permanentError } = await admin
+    .from("event_organizers")
+    .select("profile_id")
+    .eq("event_id", event.id)
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (permanentError) throw permanentError;
+  if (permanent) {
+    return res.status(409).json({ error: "This student is already an organizer for the event." });
+  }
+
+  const { data: existing, error: existingError } = await admin
+    .from("event_temp_organizers")
+    .select("expires_at")
+    .eq("event_id", event.id)
+    .eq("profile_id", profileId)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) {
+    return res.status(409).json({
+      error: "This student already has gatekeeper access.",
+      expires_at: existing.expires_at,
+    });
+  }
+
+  const { count, error: countError } = await admin
+    .from("event_temp_organizers")
+    .select("profile_id", { count: "exact", head: true })
+    .eq("event_id", event.id)
+    .gt("expires_at", new Date().toISOString());
+  if (countError) throw countError;
+  if ((count || 0) >= GATEKEEPER_LIMIT) {
+    return res.status(409).json({
+      error: `An event can have at most ${GATEKEEPER_LIMIT} gatekeepers.`,
+      code: "gatekeeper_limit",
+    });
+  }
+
+  const expiry = organizerGrantExpiry(event);
+  if (!expiry) {
+    return res.status(400).json({ error: "That event has no valid date and end time" });
+  }
+
+  const { error: grantError } = await admin.from("event_temp_organizers").upsert(
+    {
+      event_id: event.id,
+      profile_id: profileId,
+      expires_at: expiry.toISOString(),
+      granted_by: req.user.id,
+    },
+    { onConflict: "event_id,profile_id" }
+  );
+  if (grantError) throw grantError;
+
+  await writeAudit(req.user.id, "grant", "event", event.id, {
+    profile_id: profileId,
+    expires_at: expiry.toISOString(),
+  });
+
+  res.status(201).json({
+    gatekeeper: {
+      profile_id: profileId,
+      full_name: profile.full_name,
+      school_id: profile.school_id,
+      expires_at: expiry.toISOString(),
+    },
+  });
+});
+
+router.delete("/:id/gatekeepers/:profileId", requireAuth, async (req, res) => {
+  const event = await gatekeeperEvent(req, res);
+  if (!event) return;
+
+  const { data: existing, error } = await admin
+    .from("event_temp_organizers")
+    .select("profile_id")
+    .eq("event_id", event.id)
+    .eq("profile_id", req.params.profileId)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error) throw error;
+  if (!existing) return res.status(404).json({ error: "Gatekeeper not found" });
+
+  const { error: deleteError } = await admin
+    .from("event_temp_organizers")
+    .delete()
+    .eq("event_id", event.id)
+    .eq("profile_id", req.params.profileId);
+  if (deleteError) throw deleteError;
+
+  await writeAudit(req.user.id, "revoke", "event", event.id, {
+    profile_id: req.params.profileId,
+  });
+
+  res.json({ ok: true });
+});
 module.exports = router;

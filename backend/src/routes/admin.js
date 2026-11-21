@@ -7,6 +7,7 @@ const { listAccounts } = require("../lib/local-db");
 const { hasApprovalColumn, hasTempOrganizerTables, hasOfficerGroupTables } = require("../lib/schema");
 const { organizerGrantExpiry } = require("../lib/clock");
 const { getEvent } = require("../services/attendance");
+const { writeAudit } = require("../lib/audit");
 
 const router = express.Router();
 
@@ -163,6 +164,7 @@ router.get("/students", async (req, res) => {
     .from("profiles")
     .select(withApproval ? `${columns}, approved_at` : columns)
     .eq("role", "student")
+    .is("deleted_at", null)
     .order("full_name");
 
   if (withApproval && status === "pending") query = query.is("approved_at", null);
@@ -202,6 +204,7 @@ router.get("/approvals", async (req, res) => {
     )
     .in("role", ["student", "organizer"])
     .is("approved_at", null)
+    .is("deleted_at", null)
     .order("created_at", { ascending: true });
   if (error) throw error;
 
@@ -330,10 +333,11 @@ router.get("/events/:id/temp-organizers", async (req, res) => {
   const { data, error } = await admin
     .from("event_temp_organizers")
     .select(
-      "expires_at, created_at, profile:profiles!profile_id(id, school_id, full_name, photo_url, program:programs(id, code, name))"
+      "expires_at, created_at, profile:profiles!profile_id!inner(id, school_id, full_name, photo_url, deleted_at, program:programs(id, code, name))"
     )
     .eq("event_id", req.params.id)
     .gt("expires_at", new Date().toISOString())
+    .is("profile.deleted_at", null)
     .order("created_at", { ascending: true });
   if (error) throw error;
 
@@ -428,13 +432,13 @@ async function studentIdsOnly(ids) {
 
   const { data, error } = await admin
     .from("profiles")
-    .select("id, role, is_active")
+    .select("id, role, is_active, deleted_at")
     .in("id", unique);
   if (error) throw error;
 
   const allowed = new Set(
     (data || [])
-      .filter((row) => row.role === "student" && row.is_active)
+      .filter((row) => row.role === "student" && row.is_active && !row.deleted_at)
       .map((row) => row.id)
   );
   return unique.filter((id) => allowed.has(id));
@@ -469,8 +473,9 @@ router.get("/officer-groups", async (req, res) => {
   const { data, error } = await admin
     .from("officer_groups")
     .select(
-      `id, name, note, created_at, members:officer_group_members(profile:profiles!profile_id(${GROUP_MEMBER_FIELDS}))`
+      `id, name, note, created_at, deleted_at, members:officer_group_members(profile:profiles!profile_id(${GROUP_MEMBER_FIELDS}))`
     )
+    .is("deleted_at", null)
     .order("name", { ascending: true });
   if (error) throw error;
 
@@ -567,10 +572,15 @@ router.put("/officer-groups/:id", async (req, res) => {
 router.delete("/officer-groups/:id", requireAuth, requireRole("superadmin"), async (req, res) => {
   if (!(await groupsReady(res))) return;
 
-  const { error } = await admin.from("officer_groups").delete().eq("id", req.params.id);
+  const { error } = await admin
+    .from("officer_groups")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: req.user.id })
+    .eq("id", req.params.id)
+    .is("deleted_at", null);
   if (error) throw error;
 
-  res.json({ ok: true });
+  await writeAudit(req.user.id, "archive", "officer_group", req.params.id, {});
+  res.json({ ok: true, archived: true });
 });
 
 /**
@@ -707,7 +717,8 @@ router.patch("/organizer-requests/:id", async (req, res) => {
   res.json({ request: updated, expires_at: expiresAt });
 });
 
-module.exports = router;
+/* module.exports moved to the end of the file */
+
 
 /* ------------------------------------------- create admin staff */
 
@@ -810,3 +821,129 @@ router.post('/staff', requireAuth, requireRole('superadmin'), async (req, res) =
 
   res.status(201).json({ staff: profile });
 });
+
+/* ------------------------------------------------- archive / restore (0011) */
+
+const ARCHIVE_ENTITIES = {
+  events: {
+    table: "events",
+    label: "name",
+    select: "id, name, event_date, start_time, end_time, venue, deleted_at, deleted_by",
+  },
+  students: {
+    table: "profiles",
+    label: "full_name",
+    select: "id, full_name, school_id, email, role, deleted_at, deleted_by",
+  },
+  groups: {
+    table: "officer_groups",
+    label: "name",
+    select: "id, name, note, deleted_at, deleted_by",
+  },
+};
+
+router.get("/archive", requireAuth, requireRole("superadmin"), async (req, res) => {
+  if (isLocalMode) return res.json({ items: [] });
+
+  const entity = String(req.query.entity || "events");
+  const spec = ARCHIVE_ENTITIES[entity];
+  if (!spec) {
+    return res.status(400).json({ error: "entity must be events, students or groups" });
+  }
+
+  let query = admin
+    .from(spec.table)
+    .select(spec.select)
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+
+  if (req.query.q) {
+    const term = String(req.query.q).replace(/[%,()]/g, "");
+    query = query.ilike(spec.label, `%${term}%`);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = data || [];
+  const actorIds = [...new Set(rows.map((row) => row.deleted_by).filter(Boolean))];
+  const actors = {};
+  if (actorIds.length) {
+    const { data: people } = await admin
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", actorIds);
+    for (const person of people || []) actors[person.id] = person.full_name;
+  }
+
+  res.json({
+    items: rows.map((row) => ({
+      ...row,
+      deleted_by_name: actors[row.deleted_by] || null,
+    })),
+  });
+});
+
+async function setArchived(req, res, entity, archived) {
+  if (isLocalMode) {
+    return res.status(501).json({ error: "Archive needs Supabase mode" });
+  }
+
+  const spec = ARCHIVE_ENTITIES[entity];
+  if (!spec) {
+    return res.status(400).json({ error: "entity must be events, students or groups" });
+  }
+
+  const { data: row, error } = await admin
+    .from(spec.table)
+    .select(spec.select)
+    .eq("id", req.params.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!row) return res.status(404).json({ error: "Not found" });
+
+  if (entity === "students") {
+    if (row.id === req.user.id) {
+      return res.status(400).json({ error: "You cannot archive your own account" });
+    }
+    if (row.role === "superadmin" || row.role === "admin") {
+      return res.status(400).json({ error: "Staff accounts are managed from Staff accounts" });
+    }
+  }
+
+  if (archived && row.deleted_at) {
+    return res.status(409).json({ error: "This item is already archived" });
+  }
+  if (!archived && !row.deleted_at) {
+    return res.status(409).json({ error: "This item is not archived" });
+  }
+
+  const patch = archived
+    ? { deleted_at: new Date().toISOString(), deleted_by: req.user.id }
+    : { deleted_at: null, deleted_by: null };
+
+  const { error: updateError } = await admin
+    .from(spec.table)
+    .update(patch)
+    .eq("id", req.params.id);
+  if (updateError) throw updateError;
+
+  await writeAudit(
+    req.user.id,
+    archived ? "archive" : "restore",
+    entity.replace(/s$/, ""),
+    req.params.id,
+    { name: row[spec.label] }
+  );
+
+  res.json({ ok: true, archived });
+}
+
+router.post("/archive/:entity/:id", requireAuth, requireRole("superadmin"), async (req, res) => {
+  await setArchived(req, res, req.params.entity, true);
+});
+
+router.post("/archive/:entity/:id/restore", requireAuth, requireRole("superadmin"), async (req, res) => {
+  await setArchived(req, res, req.params.entity, false);
+});
+module.exports = router;

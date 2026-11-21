@@ -36,7 +36,8 @@ async function countAudience(event) {
     .from("profiles")
     .select("id", { count: "exact", head: true })
     .eq("role", "student")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .is("deleted_at", null);
 
   if (programIds.length) query = query.in("program_id", programIds);
 
@@ -71,6 +72,7 @@ async function todaysEvents(today) {
     .from("events")
     .select(EVENT_SELECT)
     .eq("event_date", today)
+    .is("deleted_at", null)
     .order("start_time", { ascending: true });
 
   if (error) throw error;
@@ -99,6 +101,7 @@ async function nextEvent(today) {
     .from("events")
     .select(EVENT_SELECT)
     .gte("event_date", today)
+    .is("deleted_at", null)
     .not("status", "in", "(completed,cancelled)")
     .order("event_date", { ascending: true })
     .order("start_time", { ascending: true })

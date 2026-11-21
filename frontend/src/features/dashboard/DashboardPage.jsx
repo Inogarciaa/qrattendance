@@ -6,6 +6,7 @@ import Avatar from "../../components/ui/Avatar";
 import {
   addTempOrganizer,
   addTempOrganizerGroup,
+  archiveEntity,
   fetchEvent,
   fetchEvents,
   fetchLiveDashboard,
@@ -58,7 +59,8 @@ function expiryLabel(value) {
   });
 }
 
-export default function DashboardPage({ onNavigate }) {
+export default function DashboardPage({ onNavigate, user, toast }) {
+  const isSuperadmin = user?.role === "superadmin";
   const [dashboard, setDashboard] = useState(null);
   const [events, setEvents] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -74,6 +76,8 @@ export default function DashboardPage({ onNavigate }) {
   });
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const [archiveError, setArchiveError] = useState("");
   const [tempOrganizers, setTempOrganizers] = useState([]);
   const [accessEnabled, setAccessEnabled] = useState(true);
   const [accessOpen, setAccessOpen] = useState(false);
@@ -362,6 +366,30 @@ export default function DashboardPage({ onNavigate }) {
     }
   };
 
+  const archiveEvent = async () => {
+    if (!selectedEvent || archiveBusy) return;
+
+    const confirmed = window.confirm(
+      `Archive “${selectedEvent.name}”? It disappears from the dashboard and the mobile app. Attendance records are kept, and a superadmin can restore it from the Archive page.`
+    );
+    if (!confirmed) return;
+
+    setArchiveBusy(true);
+    setArchiveError("");
+    try {
+      await archiveEntity("events", selectedEvent.id);
+      setSelectedId(null);
+      setDetail(null);
+      setRecords([]);
+      await load();
+      toast?.(`${selectedEvent.name} archived.`);
+    } catch (err) {
+      setArchiveError(err.message || "Could not archive this event.");
+    } finally {
+      setArchiveBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="card">
@@ -575,7 +603,23 @@ export default function DashboardPage({ onNavigate }) {
                     Change location
                   </button>
                 ) : null}
+                {isSuperadmin && selectedEvent && (
+                  <button
+                    type="button"
+                    className="db-hero-action"
+                    style={{ marginLeft: 8, borderColor: "#ef4444", color: "#ef4444" }}
+                    onClick={archiveEvent}
+                    disabled={archiveBusy}
+                  >
+                    {archiveBusy ? "Archiving…" : "Archive event"}
+                  </button>
+                )}
               </div>
+              {archiveError && (
+                <span className="err" role="alert" style={{ display: "block", marginTop: 8 }}>
+                  {archiveError}
+                </span>
+              )}
             </div>
             <div className="db-hero-badge">
               <b>{percentage}%</b>
