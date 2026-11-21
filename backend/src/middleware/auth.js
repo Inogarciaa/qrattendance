@@ -5,7 +5,7 @@ const { findAccountById, publicAccount } = require("../lib/local-db");
 const { hasApprovalColumn } = require("../lib/schema");
 
 const PROFILE_SELECT =
-  "id, school_id, full_name, role, program_id, year_level, photo_url, is_active, email, program:programs(id, code, name)";
+  "id, school_id, full_name, role, program_id, year_level, photo_url, is_active, email, deleted_at, program:programs(id, code, name)";
 
 function bearer(req) {
   const header = req.headers.authorization || "";
@@ -86,6 +86,9 @@ async function requireAuth(req, res, next) {
     if (!profile.is_active) {
       return deny(res, 403, "This account has been disabled", "account_disabled");
     }
+    if (profile.deleted_at) {
+      return deny(res, 403, "This account has been archived", "account_archived");
+    }
 
     req.authUser = authUser;
     req.user = profile;
@@ -99,6 +102,11 @@ const requireRole = (...roles) => (req, res, next) => {
   const allowed = new Set(roles);
   // A superadmin can do everything an admin can do.
   if (allowed.has("admin")) allowed.add("superadmin");
+
+  // Soft-deleted profiles (archived) cannot use any role-guarded routes
+  if (req.user?.deleted_at) {
+    return res.status(403).json({ error: "Forbidden", code: "account_archived" });
+  }
 
   if (!req.user || !allowed.has(req.user.role)) {
     return res.status(403).json({ error: "Forbidden", code: "forbidden" });

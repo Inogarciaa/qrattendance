@@ -386,7 +386,7 @@ router.post("/events/:id/temp-organizers", async (req, res) => {
   });
 });
 
-router.delete("/events/:id/temp-organizers/:profileId", async (req, res) => {
+router.delete("/events/:id/temp-organizers/:profileId", requireAuth, requireRole("admin"), async (req, res) => {
   if (!(await tempTablesReady(res))) return;
 
   const { error } = await admin
@@ -563,7 +563,7 @@ router.put("/officer-groups/:id", async (req, res) => {
   res.json({ group });
 });
 
-router.delete("/officer-groups/:id", async (req, res) => {
+router.delete("/officer-groups/:id", requireAuth, requireRole("superadmin"), async (req, res) => {
   if (!(await groupsReady(res))) return;
 
   const { error } = await admin.from("officer_groups").delete().eq("id", req.params.id);
