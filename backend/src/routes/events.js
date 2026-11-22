@@ -815,6 +815,7 @@ router.post("/:id/gatekeepers", requireAuth, async (req, res) => {
 
   await writeAudit(req.user.id, "grant", "event", event.id, {
     profile_id: profileId,
+    event_name: event.name,
     expires_at: expiry.toISOString(),
   });
 
@@ -851,6 +852,7 @@ router.delete("/:id/gatekeepers/:profileId", requireAuth, async (req, res) => {
 
   await writeAudit(req.user.id, "revoke", "event", event.id, {
     profile_id: req.params.profileId,
+    event_name: event.name,
   });
 
   res.json({ ok: true });

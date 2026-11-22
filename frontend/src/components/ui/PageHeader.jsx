@@ -1,8 +1,11 @@
-export default function PageHeader({ title, description }) {
+export default function PageHeader({ title, description, action }) {
   return (
-    <>
-      <h1>{title}</h1>
-      <p className="sub">{description}</p>
-    </>
+    <div className="page-header">
+      <div>
+        <h1>{title}</h1>
+        {description && <p className="sub">{description}</p>}
+      </div>
+      {action && <div className="page-header-action">{action}</div>}
+    </div>
   );
 }

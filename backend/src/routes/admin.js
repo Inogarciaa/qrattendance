@@ -816,7 +816,7 @@ router.post('/staff', requireAuth, requireRole('superadmin'), async (req, res) =
     action: 'staff_create',
     entity: 'profile',
     entity_id: profile.id,
-    meta: { email: trimmedEmail, role: 'admin', school_id: schoolId },
+    meta: { name: trimmedName, email: trimmedEmail, role: 'admin', school_id: schoolId },
   });
 
   res.status(201).json({ staff: profile });
@@ -946,4 +946,100 @@ router.post("/archive/:entity/:id", requireAuth, requireRole("superadmin"), asyn
 router.post("/archive/:entity/:id/restore", requireAuth, requireRole("superadmin"), async (req, res) => {
   await setArchived(req, res, req.params.entity, false);
 });
+
+/* ------------------------------------------------------ activity log (0011) */
+
+const AUDIT_ENTITY_TABLE = {
+  event: { table: "events", label: "name" },
+  student: { table: "profiles", label: "full_name" },
+  profile: { table: "profiles", label: "full_name" },
+  group: { table: "officer_groups", label: "name" },
+  officer_group: { table: "officer_groups", label: "name" },
+};
+
+router.get("/activity", requireAuth, requireRole("superadmin"), async (req, res) => {
+  if (isLocalMode) return res.json({ items: [] });
+
+  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 300);
+
+  let query = admin
+    .from("audit_log")
+    .select("id, actor_id, action, entity, entity_id, meta, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (req.query.action) query = query.eq("action", String(req.query.action));
+  if (req.query.entity) query = query.eq("entity", String(req.query.entity));
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = data || [];
+
+  // Resolve actor names and the name of the item each entry touched.
+  const actorIds = [...new Set(rows.map((row) => row.actor_id).filter(Boolean))];
+  const actors = {};
+  if (actorIds.length) {
+    const { data: people } = await admin
+      .from("profiles")
+      .select("id, full_name, role")
+      .in("id", actorIds);
+    for (const person of people || []) {
+      actors[person.id] = { full_name: person.full_name, role: person.role };
+    }
+  }
+
+  const idSets = {};
+  for (const row of rows) {
+    const spec = AUDIT_ENTITY_TABLE[row.entity];
+    if (!spec) continue;
+    const key = `${spec.table}:${spec.label}`;
+    idSets[key] = idSets[key] || new Set();
+    idSets[key].add(row.entity_id);
+  }
+
+  const labels = {};
+  for (const [key, ids] of Object.entries(idSets)) {
+    const [table, column] = key.split(":");
+    const { data: found } = await admin
+      .from(table)
+      .select(`id, ${column}`)
+      .in("id", [...ids]);
+    for (const item of found || []) {
+      labels[`${table}:${item.id}`] = item[column];
+    }
+  }
+
+  // Gatekeeper grant/revoke entries record the affected student in meta.
+  const metaIds = [
+    ...new Set(rows.map((row) => row.meta?.profile_id).filter(Boolean)),
+  ];
+  const metaPeople = {};
+  if (metaIds.length) {
+    const { data: people } = await admin
+      .from("profiles")
+      .select("id, full_name, school_id")
+      .in("id", metaIds);
+    for (const person of people || []) metaPeople[person.id] = person;
+  }
+
+  res.json({
+    items: rows.map((row) => {
+      const spec = AUDIT_ENTITY_TABLE[row.entity];
+      const actor = row.actor_id ? actors[row.actor_id] : null;
+      const subject = row.meta?.profile_id ? metaPeople[row.meta.profile_id] : null;
+      return {
+        ...row,
+        actor_name: actor?.full_name || null,
+        actor_role: actor?.role || null,
+        item_label: spec
+          ? labels[`${spec.table}:${row.entity_id}`] || row.meta?.name || row.meta?.event_name || null
+          : null,
+        subject_name: subject?.full_name || null,
+        subject_school_id: subject?.school_id || null,
+      };
+    }),
+  });
+});
+
 module.exports = router;

@@ -16,6 +16,15 @@ const PATHS = {
   mnu: "M3 6h18M3 12h18M3 18h18",
   pin: "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6",
   arc: "M3 3h18v4H3zM5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7M9 12h6",
+  search: "M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z",
+  plus: "M12 5v14M5 12h14",
+  download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+  refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
+  filter: "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
+  trash: "M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
+  x: "M18 6L6 18M6 6l12 12",
+  chevronRight: "M9 18l6-6-6-6",
+  hist: "M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 7v5l3 2M2.5 5.5v5h5",
 };
 
 export default function Icon({ name, className = "i" }) {

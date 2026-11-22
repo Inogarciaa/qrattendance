@@ -234,3 +234,10 @@ export function createStaffAccount({ fullName, email, password }) {
     body: { full_name: fullName, email, password },
   });
 }
+
+/* ------------------------------------------- activity log (superadmin) */
+
+export function fetchActivityLog({ limit = 150 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return request(`/admin/activity?${params.toString()}`);
+}

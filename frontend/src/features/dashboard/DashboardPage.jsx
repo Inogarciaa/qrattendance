@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Field from "../../components/ui/Field";
 import Icon from "../../components/ui/Icon";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -57,6 +57,37 @@ function expiryLabel(value) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function AnimatedNumber({ value }) {
+  const [display, setDisplay] = useState(value);
+  const prevRef = useRef(value);
+
+  useEffect(() => {
+    const current = Number(prevRef.current) || 0;
+    const target = Number(value) || 0;
+    prevRef.current = value;
+    if (current === target) return;
+
+    const diff = target - current;
+    const duration = 600;
+    const start = performance.now();
+
+    let frameId;
+    const step = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(current + diff * ease));
+      if (progress < 1) {
+        frameId = requestAnimationFrame(step);
+      }
+    };
+
+    frameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frameId);
+  }, [value]);
+
+  return <span>{display}</span>;
 }
 
 export default function DashboardPage({ onNavigate, user, toast }) {
@@ -392,11 +423,29 @@ export default function DashboardPage({ onNavigate, user, toast }) {
 
   if (loading) {
     return (
-      <div className="card">
-        <h2 style={{ fontSize: 16, marginBottom: 4 }}>Loading dashboard…</h2>
-        <p style={{ margin: 0, color: "var(--mu)", fontSize: 13 }}>
-          Reading events and attendance from the API.
-        </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="card" style={{ padding: 32 }}>
+          <div className="skeleton skel-title" style={{ width: "35%", height: 26 }} />
+          <div className="skeleton skel-text" style={{ width: "55%" }} />
+          <div className="skeleton skel-text" style={{ width: "30%" }} />
+        </div>
+        <div className="st">
+          <div className="card">
+            <div className="skeleton" style={{ width: 44, height: 44, borderRadius: 8, marginBottom: 14 }} />
+            <div className="skeleton skel-text" style={{ width: "45%" }} />
+            <div className="skeleton" style={{ width: "60%", height: 36, marginTop: 8 }} />
+          </div>
+          <div className="card">
+            <div className="skeleton" style={{ width: 44, height: 44, borderRadius: 8, marginBottom: 14 }} />
+            <div className="skeleton skel-text" style={{ width: "45%" }} />
+            <div className="skeleton" style={{ width: "60%", height: 36, marginTop: 8 }} />
+          </div>
+          <div className="card">
+            <div className="skeleton" style={{ width: 44, height: 44, borderRadius: 8, marginBottom: 14 }} />
+            <div className="skeleton skel-text" style={{ width: "45%" }} />
+            <div className="skeleton" style={{ width: "60%", height: 36, marginTop: 8 }} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -438,19 +487,19 @@ export default function DashboardPage({ onNavigate, user, toast }) {
             </div>
             <div className="live-kpis">
               <div className="live-kpi">
-                <span className="live-kpi-val">{live.counts.enrolled}</span>
+                <span className="live-kpi-val"><AnimatedNumber value={live.counts.enrolled} /></span>
                 <span className="live-kpi-label">Enrolled</span>
               </div>
               <div className="live-kpi green">
-                <span className="live-kpi-val">{live.counts.present}</span>
+                <span className="live-kpi-val"><AnimatedNumber value={live.counts.present} /></span>
                 <span className="live-kpi-label">Present</span>
               </div>
               <div className="live-kpi amber">
-                <span className="live-kpi-val">{live.counts.late}</span>
+                <span className="live-kpi-val"><AnimatedNumber value={live.counts.late} /></span>
                 <span className="live-kpi-label">Late</span>
               </div>
               <div className="live-kpi red">
-                <span className="live-kpi-val">{live.counts.absent}</span>
+                <span className="live-kpi-val"><AnimatedNumber value={live.counts.absent} /></span>
                 <span className="live-kpi-label">Absent</span>
               </div>
             </div>
@@ -620,9 +669,15 @@ export default function DashboardPage({ onNavigate, user, toast }) {
                   {archiveError}
                 </span>
               )}
+              <div className="hero-progress-wrap">
+                <div
+                  className="hero-progress-bar"
+                  style={{ width: `${Math.min(100, percentage)}%` }}
+                />
+              </div>
             </div>
             <div className="db-hero-badge">
-              <b>{percentage}%</b>
+              <b><AnimatedNumber value={percentage} />%</b>
               <span>Attendance rate</span>
             </div>
           </div>
@@ -649,21 +704,29 @@ export default function DashboardPage({ onNavigate, user, toast }) {
               { key: "present", label: "Present", icon: "chk", className: "kpi-present" },
               { key: "late", label: "Late", icon: "bel", className: "kpi-late" },
               { key: "absent", label: "Absent", icon: "out", className: "kpi-absent" },
-            ].map(({ key, label, icon, className }) => (
-              <div className={"card " + className} key={key}>
-                <div className="kpi-icon">
-                  <Icon name={icon} />
+            ].map(({ key, label, icon, className }) => {
+              const pct = counts.enrolled
+                ? Math.round((counts[key] / counts.enrolled) * 100)
+                : 0;
+              return (
+                <div className={"card " + className} key={key}>
+                  <div className="kpi-icon">
+                    <Icon name={icon} />
+                  </div>
+                  <div className="kpi-label">{label}</div>
+                  <b><AnimatedNumber value={counts[key]} /></b>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                    <AnimatedNumber value={pct} />% of enrolled
+                  </div>
+                  <div className="stat-progress-track">
+                    <div
+                      className="stat-progress-bar"
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="kpi-label">{label}</div>
-                <b>{counts[key]}</b>
-                <div style={{ fontSize: 12, color: "var(--mu)", marginTop: 2 }}>
-                  {counts.enrolled
-                    ? Math.round((counts[key] / counts.enrolled) * 100)
-                    : 0}
-                  % of enrolled
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {accessEnabled && selectedEvent && (

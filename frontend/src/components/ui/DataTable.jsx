@@ -26,7 +26,17 @@ export default function DataTable({
             ))
           ) : (
             <tr>
-              <td colSpan={columns.length}>{emptyMessage}</td>
+              <td
+                colSpan={columns.length}
+                style={{
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  padding: '32px 16px',
+                  fontSize: 13,
+                }}
+              >
+                {emptyMessage}
+              </td>
             </tr>
           )}
         </tbody>

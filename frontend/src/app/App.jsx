@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Icon from "../components/ui/Icon";
 import Avatar from "../components/ui/Avatar";
 import ArchivePage from "../features/archive/ArchivePage";
+import ActivityPage from "../features/activity/ActivityPage";
 import CreateEventPage from "../features/events/CreateEventPage";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import ApprovalsPage from "../features/approvals/ApprovalsPage";
@@ -19,6 +20,7 @@ const MAIN_NAV = [
   { label: "Students", icon: "usr" },
   { label: "Approvals", icon: "uc" },
   { label: "Archive", icon: "arc", superadminOnly: true },
+  { label: "Activity", icon: "hist", superadminOnly: true },
 ];
 
 const GENERAL_NAV = [
@@ -37,7 +39,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toastMessage) return undefined;
-    const timer = setTimeout(() => setToastMessage(""), 3000);
+    const timer = setTimeout(() => setToastMessage(""), 3500);
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
@@ -100,7 +102,7 @@ export default function App() {
       onClick={() => navigate(label)}
     >
       <Icon name={icon} />
-      {label}
+      <span>{label}</span>
     </button>
   );
 
@@ -108,9 +110,10 @@ export default function App() {
     if (checkingSession) {
       return (
         <div className="app out">
-          <div className="card done">
-            <h2 style={{ fontSize: 18 }}>Loading your session…</h2>
-            <p style={{ margin: "4px 0 0" }}>Connecting to LacoQR.</p>
+          <div className="card done" style={{ padding: "36px 32px", maxWidth: 360, width: "100%" }}>
+            <div className="skeleton skel-title" style={{ width: "65%", margin: "0 auto 16px" }} />
+            <div className="skeleton skel-text" style={{ width: "85%", margin: "0 auto 8px" }} />
+            <div className="skeleton skel-text" style={{ width: "60%", margin: "0 auto" }} />
           </div>
         </div>
       );
@@ -124,9 +127,12 @@ export default function App() {
   if (!isStaff) {
     return (
       <div className="app out">
-        <div className="card done">
-          <h2 style={{ fontSize: 18 }}>Staff access only</h2>
-          <p style={{ margin: "4px 0 16px" }}>
+        <div className="card done" style={{ maxWidth: 440, padding: 36 }}>
+          <div className="kpi-icon" style={{ margin: "0 auto 16px", background: "var(--warning-bg)", color: "var(--warning)" }}>
+            <Icon name="inf" />
+          </div>
+          <h2 style={{ fontSize: 19, fontWeight: 800, marginBottom: 8 }}>Staff access only</h2>
+          <p style={{ margin: "0 0 20px", color: "var(--text-muted)", lineHeight: 1.6 }}>
             The web dashboard is for administrators. Students and organizers use the
             LacoQR mobile app to check in and scan.
           </p>
@@ -141,12 +147,13 @@ export default function App() {
   const mainNav = MAIN_NAV.filter((item) => !item.superadminOnly || isSuperadmin);
 
   const pages = {
-    Dashboard: <DashboardPage onNavigate={navigate} user={user} />,
+    Dashboard: <DashboardPage onNavigate={navigate} user={user} toast={setToastMessage} />,
     Reports: <ReportsPage toast={setToastMessage} />,
     "Create Event": <CreateEventPage toast={setToastMessage} />,
-    Students: <SearchStudentsPage user={user} />,
+    Students: <SearchStudentsPage user={user} toast={setToastMessage} />,
     Approvals: <ApprovalsPage />,
     Archive: <ArchivePage toast={setToastMessage} />,
+    Activity: <ActivityPage />,
     Settings: (
       <SettingsPage
         user={{
@@ -171,7 +178,7 @@ export default function App() {
             <span className="logo">
               <Icon name="grid" />
             </span>
-            LacoQR
+            <span>LacoQR</span>
           </div>
           <div className="grp">Menu</div>
           {mainNav.map(renderNavItem)}
@@ -185,10 +192,18 @@ export default function App() {
             onClick={() => setLogoutDialogOpen(true)}
           >
             <Icon name="out" />
-            Logout
+            <span>Logout</span>
           </button>
         </div>
       </aside>
+
+      {sidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       <div
         className="main"
@@ -206,26 +221,21 @@ export default function App() {
           >
             <Icon name="mnu" />
           </button>
-          <button type="button" className="ib" aria-label="Notifications">
-            <Icon name="bel" />
-          </button>
-          <button type="button" className="ib" aria-label="Messages">
-            <Icon name="cht" />
-          </button>
           <div className="me">
             <Avatar name={user.full_name} photoUrl={user.photo_url} size="md" />
             <div>
               <b>{user.full_name}</b>
-              <small>{user.email}</small>
             </div>
             <span className="role-pill">{user.role}</span>
           </div>
         </header>
         <main className="content">
-          <div className="inner">
-            {page === "Archive" && !isSuperadmin
-              ? pages.Dashboard
-              : pages[page] ?? pages.Dashboard}
+          <div className="inner" key={page}>
+            {page === "Archive" || page === "Activity" ? (
+              isSuperadmin ? pages[page] : pages.Dashboard
+            ) : (
+              pages[page] ?? pages.Dashboard
+            )}
           </div>
         </main>
       </div>
@@ -240,7 +250,7 @@ export default function App() {
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="logout-title">Log out?</h2>
-            <p>You'll need to sign in again to manage events.</p>
+            <p>You will need to sign in again to manage events and attendance records.</p>
             <div className="acts">
               <button
                 type="button"
@@ -258,8 +268,9 @@ export default function App() {
       )}
 
       {toastMessage && (
-        <div className="toast" role="status">
-          {toastMessage}
+        <div className="toast" role="status" key={toastMessage}>
+          <Icon name="chk" />
+          <span>{toastMessage}</span>
         </div>
       )}
     </div>
