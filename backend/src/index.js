@@ -2,8 +2,33 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
+// Browsers only need CORS; mobile clients send no Origin header and are always
+// allowed. Set CORS_ORIGIN to a comma-separated allowlist in production, e.g.
+// "https://lacoqr.vercel.app,https://*.vercel.app". Empty means allow any origin.
+const corsRules = String(process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+function originAllowed(origin) {
+  if (!corsRules.length || !origin) return true;
+  return corsRules.some((rule) => {
+    if (!rule.includes("*")) return rule === origin;
+    const pattern = rule
+      .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*");
+    return new RegExp(`^${pattern}$`).test(origin);
+  });
+}
+
 const app = express();
-app.use(cors());
+// Render and other proxies terminate TLS in front of the app.
+app.set("trust proxy", 1);
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, originAllowed(origin)),
+  })
+);
 app.use(express.json({ limit: "5mb" }));
 
 // Live dashboards poll these endpoints; a cached (304) response would show
@@ -68,5 +93,5 @@ app.use((err, req, res, next) => {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
+  console.log(`API listening on port ${port}`);
 });

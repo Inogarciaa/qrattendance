@@ -139,6 +139,8 @@ npm run seed         # seed Supabase or the local dev database
 
 ## Documentation
 
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — deploying the API to Render, the
+  dashboard to Vercel, and the app with Expo EAS.
 - [`docs/PROJECT_ANALYSIS.md`](docs/PROJECT_ANALYSIS.md) — requirements extracted
   from the proposal and the proposed build plan.
 - [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — entities, ERD, data dictionary,
