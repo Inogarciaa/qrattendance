@@ -27,6 +27,11 @@ function verificationLabel(row) {
   return "";
 }
 
+function capitalize(value) {
+  const text = String(value ?? "");
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+}
+
 async function buildRows(filters) {
   const { event_id, status, program_id, from, to } = filters;
   const location = (await hasGeofenceColumns()) ? LOCATION_SELECT : "";
@@ -106,7 +111,7 @@ router.get("/export", async (req, res) => {
         row.student?.school_id,
         row.student?.full_name,
         row.student?.program?.code,
-        row.status,
+        capitalize(row.status),
         row.method ?? "",
         row.scanned_at,
         verificationLabel(row),
@@ -121,7 +126,8 @@ router.get("/export", async (req, res) => {
   const stamp = new Date().toISOString().slice(0, 10);
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="attendance-report-${stamp}.csv"`);
-  res.send(lines.join("\n"));
+  // The BOM keeps Excel from mis-reading the UTF-8 names and en dashes.
+  res.send("\uFEFF" + lines.join("\r\n"));
 });
 
 module.exports = router;

@@ -205,8 +205,63 @@ export function fetchReports(filters = {}) {
   return request(`/reports${query ? `?${query}` : ""}`);
 }
 
-/* ------------------------------------- archive / restore (0011, superadmin) */
+/**
+ * Downloads the filtered report as a CSV file and returns its filename.
+ * The export endpoint streams a file, so this bypasses the JSON helper.
+ */
+export async function downloadReportCsv(filters = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      params.set(key, value);
+    }
+  }
+  const query = params.toString();
 
+  const session = loadSession();
+  let response;
+  try {
+    response = await fetch(`${API_URL}/reports/export${query ? `?${query}` : ""}`, {
+      headers: session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {},
+    });
+  } catch {
+    throw new Error("Cannot reach the API. Is the backend running on port 3000?");
+  }
+
+  if (!response.ok) {
+    let message = `Export failed (${response.status})`;
+    try {
+      const data = await response.json();
+      if (data?.error) message = data.error;
+    } catch {
+      // The body was not JSON; keep the generic message.
+    }
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const filename =
+    match?.[1] || `attendance-report-${new Date().toISOString().slice(0, 10)}.csv`;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  return { filename, bytes: blob.size };
+}
+
+/* ------------------------------------- archive / restore (0011, superadmin) */
 /** entity is one of: events, students, groups. */
 export function fetchArchive(entity, query = "") {
   const params = new URLSearchParams({ entity });

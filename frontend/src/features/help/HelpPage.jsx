@@ -53,6 +53,14 @@ export default function HelpPage() {
             Anyone who scans after the event's start time plus its grace period.
           </p>
         </details>
+        <details>
+          <summary>How do I export an attendance report?</summary>
+          <p>
+            Open Reports, choose the event, status, program and date range, then
+            press Export CSV. The file downloads with the same records you see in
+            the table, including school ID, venue, scan time and location check.
+          </p>
+        </details>
       </div>
 
       {sent ? (
