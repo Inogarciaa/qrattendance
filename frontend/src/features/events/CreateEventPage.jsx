@@ -29,13 +29,20 @@ const MODES = [
   },
 ];
 
+const VENUES = ["Quadrangle", "Auditorium", "Little Theater", "AVC", "Other"];
+
 const BLANK_EVENT = {
   name: "",
   description: "",
   venue: "",
+  venueOther: "",
   date: "",
-  start: "",
-  end: "",
+  startHour: "8",
+  startMinute: "00",
+  startPeriod: "AM",
+  endHour: "10",
+  endMinute: "00",
+  endPeriod: "AM",
   grace: "15",
   mode: "gatekeeper",
   programs: [],
@@ -44,6 +51,14 @@ const BLANK_EVENT = {
   longitude: "",
   radius: "100",
 };
+
+/** Converts the hour/minute/period dropdown values to "HH:mm" 24h format. */
+function to24h(hour, minute, period) {
+  let h = parseInt(hour, 10);
+  if (period === "PM" && h < 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${minute}`;
+}
 
 export default function CreateEventPage({ toast }) {
   const [form, setForm] = useState(BLANK_EVENT);
@@ -108,6 +123,36 @@ export default function CreateEventPage({ toast }) {
     setErrors({ ...errors, [key]: "" });
   };
 
+  const select = (key, options, placeholder) => (
+    <select id={key} value={form[key]} onChange={update(key)} className={errors[key] ? "bad" : ""}>
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map((opt) => (
+        <option key={opt} value={opt}>
+          {opt}
+        </option>
+      ))}
+    </select>
+  );
+
+  const timeDropdowns = (prefix) => (
+    <div style={{ display: "flex", gap: "8px" }}>
+      <select value={form[`${prefix}Hour`]} onChange={update(`${prefix}Hour`)}>
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+          <option key={h} value={h}>{h}</option>
+        ))}
+      </select>
+      <select value={form[`${prefix}Minute`]} onChange={update(`${prefix}Minute`)}>
+        <option value="00">00</option>
+        <option value="30">30</option>
+      </select>
+      <select value={form[`${prefix}Period`]} onChange={update(`${prefix}Period`)}>
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+    </div>
+  );
+
+
   const toggle = (listKey, id) => {
     const values = form[listKey];
     setForm({
@@ -168,9 +213,13 @@ export default function CreateEventPage({ toast }) {
   const needsOrganizers = !selfService;
   const needsDisplay = form.mode !== "gatekeeper";
   const graceMinutes = parseInt(form.grace, 10);
+
+  const startTime24 = to24h(form.startHour, form.startMinute, form.startPeriod);
+  const endTime24 = to24h(form.endHour, form.endMinute, form.endPeriod);
+
   const lateAt =
-    form.start && graceMinutes >= 0
-      ? formatTime(toMinutes(form.start) + graceMinutes)
+    startTime24 && graceMinutes >= 0
+      ? formatTime(toMinutes(startTime24) + graceMinutes)
       : "";
 
   const pinLat = Number(form.latitude);
@@ -245,12 +294,11 @@ export default function CreateEventPage({ toast }) {
 
   const submit = async () => {    const nextErrors = {};
     if (!form.name.trim()) nextErrors.name = "Enter the event name.";
-    if (!form.venue.trim()) nextErrors.venue = "Enter the venue.";
+    if (!form.venue.trim()) nextErrors.venue = "Select the venue.";
+    if (form.venue === "Other" && !form.venueOther.trim()) nextErrors.venueOther = "Enter the custom venue name.";
     if (!form.date) nextErrors.date = "Choose the event date.";
-    if (!form.start) nextErrors.start = "Choose a start time.";
-    if (!form.end) {
-      nextErrors.end = "Choose an end time.";
-    } else if (form.start && form.end <= form.start) {
+    
+    if (endTime24 <= startTime24) {
       nextErrors.end = "End time must be after the start time.";
     }
     if (isNaN(graceMinutes) || graceMinutes < 0 || graceMinutes > 120) {
@@ -293,10 +341,10 @@ export default function CreateEventPage({ toast }) {
       const { event } = await createEvent({
         name: form.name.trim(),
         description: form.description.trim(),
-        venue: form.venue.trim(),
+        venue: form.venue === "Other" ? form.venueOther.trim() : form.venue.trim(),
         event_date: form.date,
-        start_time: form.start,
-        end_time: form.end,
+        start_time: startTime24,
+        end_time: endTime24,
         grace_minutes: graceMinutes,
         scan_mode: form.mode,
         program_ids: form.programs,
@@ -430,17 +478,22 @@ export default function CreateEventPage({ toast }) {
             />
           </Field>
           <Field id="venue" label="Venue" required error={errors.venue} full>
-            {input("venue", "text", "e.g. LCC Auditorium")}
+            {select("venue", VENUES, "Select a venue")}
           </Field>
+          {form.venue === "Other" && (
+            <Field id="venueOther" label="Other venue name" required error={errors.venueOther} full>
+              {input("venueOther", "text", "Enter venue name")}
+            </Field>
+          )}
           <Field id="date" label="Date" required error={errors.date}>
             {input("date", "date")}
           </Field>
           <div />
           <Field id="start" label="Start time" required error={errors.start}>
-            {input("start", "time")}
+            {timeDropdowns("start")}
           </Field>
           <Field id="end" label="End time" required error={errors.end}>
-            {input("end", "time")}
+            {timeDropdowns("end")}
           </Field>
         </div>
       </div>
