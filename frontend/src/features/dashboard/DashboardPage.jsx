@@ -304,14 +304,14 @@ export default function DashboardPage({ onNavigate, user, toast }) {
     const tally = detail?.tally || { present: 0, late: 0, absent: 0 };
     const enrolled = detail?.enrolled ?? 0;
     const event = detail?.event;
-    // Before an event starts, "absent" means "not yet arrived" and would show
-    // the whole audience as absent. Only derive it once scanning is underway.
-    const started = event ? ["live", "closed", "completed"].includes(event.status) : false;
+    // Absent should only count students explicitly marked absent while live/upcoming,
+    // and only compute unmatched as absent when the event is completed or closed.
+    const isFinished = event ? ["closed", "completed"].includes(event.status) : false;
     return {
       enrolled,
       present: tally.present || 0,
       late: tally.late || 0,
-      absent: started
+      absent: isFinished
         ? Math.max(0, enrolled - (tally.present || 0) - (tally.late || 0))
         : tally.absent || 0,
     };
