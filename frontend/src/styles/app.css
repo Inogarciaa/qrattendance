@@ -82,15 +82,15 @@
   --shadow-md:   0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
   --shadow-lg:   0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
   --shadow-xl:   0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
-  --radius:      8px;
-  --radius-sm:   6px;
-  --radius-lg:   10px;
-  --radius-xl:   12px;
+  --radius:      12px;
+  --radius-sm:   8px;
+  --radius-lg:   16px;
+  --radius-xl:   20px;
   --radius-full: 9999px;
 
   display: flex;
   min-height: 100vh;
-  background: #f1f5f9;
+  background: var(--bg);
   color: var(--text);
   font: 14px/1.5 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -418,15 +418,16 @@ h1 {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
   margin-bottom: 16px;
-  box-shadow: none;
-  transition: border-color 0.2s;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.2s, border-color 0.2s;
   animation: fadeSlideUp 0.4s ease both;
 }
 
 .card:hover {
+  box-shadow: var(--shadow-md);
   border-color: var(--border-hover);
 }
 
@@ -956,68 +957,84 @@ tbody tr:hover { background: var(--bg); }
    DASHBOARD HERO
    ========================================================= */
 .db-hero {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 24px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #312e81 100%);
+  border-radius: var(--radius-xl);
+  padding: 32px 36px;
   margin-bottom: 20px;
-  color: var(--text);
+  color: white;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 20px 40px rgba(15,23,42,0.4);
 }
 
-.db-hero::before,
+.db-hero::before {
+  content: "";
+  position: absolute;
+  right: -60px;
+  top: -60px;
+  width: 220px;
+  height: 220px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 50%;
+}
+
 .db-hero::after {
-  display: none;
+  content: "";
+  position: absolute;
+  right: 80px;
+  bottom: -80px;
+  width: 180px;
+  height: 180px;
+  background: rgba(99,102,241,0.15);
+  border-radius: 50%;
 }
 
 .db-hero h1 {
-  color: var(--text);
-  font-size: 20px;
-  margin: 0 0 4px;
+  color: white;
+  font-size: 24px;
+  margin: 0 0 6px;
   letter-spacing: -0.5px;
 }
 
 .db-hero p {
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.6);
   font-size: 13px;
   margin: 0;
 }
 
 .db-hero-badge {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: var(--radius);
-  padding: 12px 16px;
+  padding: 16px 20px;
   text-align: center;
   flex: none;
   z-index: 1;
-  min-width: 100px;
+  min-width: 110px;
   transition: all 0.2s;
 }
 
 .db-hero-badge:hover {
-  border-color: var(--border-hover);
+  background: rgba(255,255,255,0.15);
 }
 
 .db-hero-badge b {
   display: block;
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 800;
   line-height: 1;
-  color: var(--brand);
+  color: white;
 }
 
 .db-hero-badge span {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 11px;
+  opacity: 0.65;
   margin-top: 4px;
   display: block;
 }
@@ -1307,44 +1324,51 @@ details p {
    LIVE EVENT CARD
    ========================================================= */
 .live-wrap {
-  border-radius: var(--radius);
+  border-radius: var(--radius-xl);
   overflow: hidden;
   margin-bottom: 20px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid rgba(99,102,241,0.3);
+  box-shadow: 0 8px 32px rgba(15,23,42,0.2);
   animation: fadeSlideUp 0.4s ease both;
 }
 
 .live-header {
-  background: var(--surface);
-  padding: 24px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #312e81 100%);
+  padding: 28px 32px;
   position: relative;
   overflow: hidden;
 }
 
 .live-header::after {
-  display: none;
+  content: "";
+  position: absolute;
+  right: -20px;
+  top: -30px;
+  width: 200px;
+  height: 200px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .live-tag {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: #fee2e2;
-  border: 1px solid #fecaca;
+  background: rgba(239,68,68,0.2);
+  border: 1px solid rgba(239,68,68,0.4);
   border-radius: var(--radius-full);
-  padding: 4px 10px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: #dc2626;
-  margin-bottom: 12px;
-  text-transform: uppercase;
+  padding: 4px 12px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #fca5a5;
+  margin-bottom: 14px;
 }
 
 .live-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #ef4444;
   animation: livepulse 1.5s infinite;
@@ -1352,15 +1376,15 @@ details p {
 }
 
 .live-title {
-  color: var(--text);
-  font-size: 20px;
-  font-weight: 700;
+  color: white;
+  font-size: 22px;
+  font-weight: 800;
   margin: 0 0 4px;
   letter-spacing: -0.5px;
 }
 
 .live-sub {
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.5);
   font-size: 13px;
   margin: 0;
 }
@@ -1368,46 +1392,46 @@ details p {
 .live-kpis {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  border-top: 1px solid var(--border);
-  margin-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin-top: 24px;
 }
 
 .live-kpi {
-  padding: 16px;
+  padding: 18px 20px;
   text-align: center;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid rgba(255,255,255,0.07);
   transition: background 0.2s;
 }
 
-.live-kpi:hover { background: var(--bg); }
+.live-kpi:hover { background: rgba(255,255,255,0.03); }
 .live-kpi:last-child { border-right: none; }
 
 .live-kpi-val {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text);
+  font-size: 30px;
+  font-weight: 800;
+  color: white;
   line-height: 1;
   display: block;
   animation: countUp 0.6s ease both;
 }
 
 .live-kpi-label {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.4);
   margin-top: 4px;
   display: block;
 }
 
-.live-kpi.green .live-kpi-val { color: #059669; }
-.live-kpi.amber .live-kpi-val { color: #d97706; }
-.live-kpi.red   .live-kpi-val { color: #dc2626; }
+.live-kpi.green .live-kpi-val { color: #6ee7b7; }
+.live-kpi.amber .live-kpi-val { color: #fcd34d; }
+.live-kpi.red   .live-kpi-val { color: #fca5a5; }
 
 .live-body {
   background: var(--surface);
-  padding: 20px;
+  padding: 24px 28px;
   border-top: 1px solid var(--border);
 }
 
@@ -1536,43 +1560,144 @@ details p {
 /* =========================================================
    LOGIN PAGE
    ========================================================= */
-.login-page { display: flex; align-items: center; justify-content: center; background: #f1f5f9; }
+.login-page { display: block; background: var(--navy); }
 
 .login-shell {
-  width: 100%;
-  max-width: 440px;
-  padding: 24px;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
 }
 
 .login-hero {
-  display: none;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  padding: 60px 68px;
+  color: white;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #312e81 100%);
+}
+
+.login-hero::before {
+  content: "";
+  position: absolute;
+  right: -120px;
+  top: -100px;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.03);
+}
+
+.login-hero::after {
+  content: "";
+  position: absolute;
+  left: -80px;
+  bottom: -150px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: rgba(79,70,229,0.2);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-brand b {
+  display: block;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.login-brand small {
+  display: block;
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 2px;
+}
+
+.login-brand .logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+}
+
+.login-hero h1 {
+  position: relative;
+  z-index: 1;
+  margin: 48px 0 0;
+  font-size: clamp(32px, 4vw, 50px);
+  line-height: 1.08;
+  letter-spacing: -1.5px;
+  color: white;
+  font-weight: 800;
+}
+
+.login-hero p {
+  position: relative;
+  z-index: 1;
+  margin: 18px 0 0;
+  max-width: 380px;
+  color: rgba(255,255,255,0.6);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.login-badges {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 28px;
+}
+
+.login-badges span {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  color: rgba(255,255,255,0.85);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
 }
 
 .login-panel {
-  display: block;
-  padding: 0;
-  background: transparent;
+  display: grid;
+  place-items: center;
+  padding: 48px 32px;
+  background: var(--bg);
 }
 
 .login-card {
   width: 100%;
+  max-width: 440px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 40px;
-  box-shadow: none;
+  border-radius: var(--radius-xl);
+  padding: 36px 36px 28px;
+  box-shadow: var(--shadow-xl);
   animation: scaleIn 0.4s ease;
 }
 
 .login-card h2 {
-  font-size: 22px;
+  font-size: 25px;
   letter-spacing: -0.5px;
   margin: 0;
   font-weight: 800;
 }
 
 .login-sub {
-  margin: 6px 0 32px;
+  margin: 6px 0 24px;
   color: var(--text-muted);
   font-size: 13.5px;
 }
