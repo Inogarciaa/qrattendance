@@ -487,19 +487,19 @@ export default function DashboardPage({ onNavigate, user, toast }) {
             </div>
             <div className="live-kpis">
               <div className="live-kpi">
-                <span className="live-kpi-val"><AnimatedNumber value={live.counts.enrolled} /></span>
+                <span className="live-kpi-val"><AnimatedNumber value={live.counts?.enrolled ?? live.tally?.enrolled ?? 0} /></span>
                 <span className="live-kpi-label">Enrolled</span>
               </div>
               <div className="live-kpi green">
-                <span className="live-kpi-val"><AnimatedNumber value={live.counts.present} /></span>
+                <span className="live-kpi-val"><AnimatedNumber value={live.counts?.present ?? live.tally?.present ?? 0} /></span>
                 <span className="live-kpi-label">Present</span>
               </div>
               <div className="live-kpi amber">
-                <span className="live-kpi-val"><AnimatedNumber value={live.counts.late} /></span>
+                <span className="live-kpi-val"><AnimatedNumber value={live.counts?.late ?? live.tally?.late ?? 0} /></span>
                 <span className="live-kpi-label">Late</span>
               </div>
               <div className="live-kpi red">
-                <span className="live-kpi-val"><AnimatedNumber value={live.counts.absent} /></span>
+                <span className="live-kpi-val"><AnimatedNumber value={live.counts?.absent ?? live.tally?.absent ?? 0} /></span>
                 <span className="live-kpi-label">Absent</span>
               </div>
             </div>

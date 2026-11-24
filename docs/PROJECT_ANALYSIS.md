@@ -6,13 +6,13 @@ them into an implementation plan.
 **Sources**
 
 - `Dynamic QR Attendance.pdf` (8 pages)
-- `erd-original.png` / the supplied `erd.pdf` (one-page ERD)
+- `erd-original.png` / the supplied `erd.pdf` (one-page ERD)   
 
 ---
 
 ## 1. What the system is
 
-LacoQR is an event attendance platform for La Consolacion College Bacolod. It
+AttendX is an event attendance platform for La Consolacion College Bacolod. It
 replaces paper sign-in sheets and static QR codes with **rotating QR tokens** and
 an optional **human verification step**.
 
@@ -88,21 +88,19 @@ temporary password or one-time code and force a password change on first login.
 | EVT-01 | Admin can create an event with name, description, venue, date, start/end time, grace period, scan mode, and QR refresh interval. |
 | EVT-02 | Admin can edit a draft/scheduled event and cancel an event. |
 | EVT-03 | Admin selects the audience by program and (recommended) year level. An empty audience means all programs. |
-| EVT-04 | Admin assigns one or more organizers to an event, or names a temporary organizer instead. Only assigned organizers, temporary grant-holders (or admins) can gatekeeper-scan that event. |
+| EVT-04 | Admin assigns one or more organizers to an event. Only assigned organizers (or admins) can gatekeeper-scan that event. |
 | EVT-05 | Admin can open a display terminal that continuously issues event tokens for self-service or dual mode. |
 | EVT-06 | Admin can close an event. Closing generates Absent records for enrolled students and stores a summary. |
-| EVT-07 | Admin can save a named group of student officers once, then add the whole group as temporary gatekeepers in one step. Membership is copied at that moment, so editing the group later does not change events that already have access. |
 
 ### 3.3 Mobile — student
 
 | ID | Requirement |
 | --- | --- |
-| STU-01 | Student sees a personal QR code that expires after 30 seconds; it is not refreshed automatically, so the student taps **Generate again** to show a new one. |
+| STU-01 | Student sees a personal QR code that refreshes automatically before its 30-second expiry. |
 | STU-02 | Student can open a camera scanner to scan an event display QR. |
 | STU-03 | Self-service check-in succeeds only when the event is live, uses self-service/dual mode, the student is in the audience, the token is fresh and unused, and no attendance record exists yet. |
 | STU-04 | Student can view personal attendance history and status. |
 | STU-05 | The app shows clear success, duplicate, expired, wrong-event, and not-in-audience messages. |
-| STU-06 | Student can ask to run the scanner for one event, see the pending state, cancel the request, and open the gatekeeper scanner once approved — without losing their personal QR, self check-in or history. |
 
 ### 3.4 Mobile — organizer
 
@@ -114,8 +112,6 @@ temporary password or one-time code and force a password change on first login.
 | ORG-04 | Every scan attempt is logged with result/reason, scanner, event, student, device, and processing time. |
 | ORG-05 | Organizer sees a live count of present/late/absent students for the event. |
 | ORG-06 | Organizer cannot scan for an event they are not assigned to, and cannot use gatekeeper mode when the event is self-service only. |
-| ORG-07 | An admin can grant a student temporary gatekeeper access to one event, or approve the student's request. `profiles.role` does not change, so the student's personal QR, self check-in and history keep working. |
-| ORG-08 | Temporary access ends automatically one hour after the event's end time (`Asia/Manila`), can be revoked at any time, and never lets the grant-holder record their own attendance at their own gate. |
 
 ### 3.5 Live monitoring and reports (web)
 
@@ -127,7 +123,6 @@ temporary password or one-time code and force a password change on first login.
 | RPT-04 | Admin can filter attendance by event, status, program, and date range. |
 | RPT-05 | Admin can export the filtered result to CSV (and later XLSX/PDF). |
 | RPT-06 | Each export is recorded in `report_exports` for auditability. |
-| RPT-07 | Admin can see the active temporary gatekeepers for an event, revoke one, and approve or decline student organizer requests from the approvals queue. |
 
 ### 3.6 Superadmin
 
@@ -149,8 +144,7 @@ temporary password or one-time code and force a password change on first login.
    closed.
 3. **Token lifetime** — student/display tokens expire after 30 seconds by
    default. The server clock is authoritative; expired tokens are always
-   rejected. The event display refreshes itself; the student regenerates the
-   personal code on demand.
+   rejected.
 4. **One active token per subject** — issuing a new student or event token
    replaces the previous one so old QR images stop working immediately.
 5. **Token subject must match the operation** — a student token cannot be used as
@@ -158,9 +152,8 @@ temporary password or one-time code and force a password change on first login.
 6. **Audience check** — an empty `event_audiences` set means the event is open to
    all programs; otherwise the student's program (and year level, if configured)
    must match.
-7. **Organizer scope** — a gatekeeper scan is allowed only for an admin, an
-   organizer assigned to that event, or a student holding an unexpired temporary
-   grant for it.
+7. **Organizer scope** — a gatekeeper scan is allowed only for an admin or an
+   organizer assigned to that event.
 8. **Self-service scope** — only a student may call self-check-in, and only for
    an event in `self_service` or `dual` mode.
 9. **Duplicate scans** — a second check-in returns the existing record and does
@@ -172,12 +165,6 @@ temporary password or one-time code and force a password change on first login.
     as well as status.
 12. **Photo data** — profile photos are used only for identity verification and
     must not be exposed to unauthenticated clients.
-13. **Temporary gatekeeper access** — stored per event, never on `profiles.role`,
-    so the account stays a student. It expires at event end + 60 minutes
-    (`Asia/Manila`), is re-checked on every request instead of by a scheduled job,
-    and the grant-holder cannot scan their own personal QR at their own gate.
-    A gatekeeper-mode event may run on a temporary organizer alone; the create form
-    only refuses an event with neither a permanent organizer nor a temporary one.
 
 ---
 
@@ -187,7 +174,7 @@ temporary password or one-time code and force a password change on first login.
 | --- | --- |
 | Verification speed | Under 3 seconds per gatekeeper scan (preview + confirm). |
 | Token security | 0% acceptance of expired tokens during security testing. |
-| QR rotation | 30 seconds, configurable per event. The event display refreshes itself; the student taps Generate again after expiry. |
+| QR rotation | 30 seconds, configurable per event; refresh client-side before expiry. |
 | Real-time updates | Live dashboard reflects new check-ins within ~2 seconds. |
 | Availability | Requires an internet connection; document offline behavior as a limitation. |
 | Security | Supabase Auth, server-side authorization, RLS, HTTPS, least-privilege service key usage, hashed/opaque tokens. |
@@ -235,17 +222,28 @@ These are real issues to close before the system is considered feature-complete:
 1. **Service-role bypasses RLS.** The API uses the Supabase service-role key for
    every query, so Postgres RLS does not protect route handlers. Each endpoint
    must perform its own role/assignment/audience checks.
-2. **Gatekeeper scan does not re-check liveness or audience.** `POST
+2. **Event detail is not scoped.** `GET /api/events/:id` lets any authenticated
+   user read any event. It should check admin/superadmin, assigned organizer, or
+   student audience membership.
+3. **Gatekeeper scan does not re-check liveness or audience.** `POST
    /api/scan/confirm` validates the token and duplicate state, but not whether the
    event is live or the student is in the audience. Move all checks into the
    confirm transaction.
-3. **Organizer cancellation is not logged.** The ERD expects
+4. **Organizer cancellation is not logged.** The ERD expects
    `cancelled_by_officer`; the current preview/confirm flow has no cancel
    endpoint or log entry.
-4. **Report exports are not audited.** CSV export works, but no `report_exports`
+5. **Report exports are not audited.** CSV export works, but no `report_exports`
    row is written.
-5. **Raw tokens are stored.** `qr_tokens.token` and `scan_attempts.token` hold the
+6. **Raw tokens are stored.** `qr_tokens.token` and `scan_attempts.token` hold the
    raw value. Store a hash instead.
+7. **All-program events are hidden from students.** `GET /api/events` uses an
+   inner join on `event_audiences`, so an event with no audience rows (meaning
+   "all programs") does not appear. Change the query or insert explicit audience
+   rows.
+8. **`/auth/me` returns the full profile.** It includes private fields such as
+   `birthdate`. Return only the fields the client needs.
+9. **No superadmin enforcement.** The role does not exist yet in the enum, RLS,
+   or route guards.
 
 ---
 

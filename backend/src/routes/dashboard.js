@@ -15,7 +15,7 @@ const EVENT_SELECT = `${EVENT_FIELDS}, event_audiences(program_id)`;
 
 function audienceProgramIds(event) {
   return (event.event_audiences || [])
-    .map((row) => row.program_id)
+    .map((row) => row.program_id ?? row.program?.id)
     .filter((id) => id !== null && id !== undefined);
 }
 
@@ -29,7 +29,9 @@ async function countAudience(event) {
   if (isLocalMode) {
     const students = localDb.listAccounts("student");
     if (!programIds.length) return students.length;
-    return students.filter((student) => programIds.includes(student.program?.id)).length;
+    return students.filter((student) =>
+      programIds.includes(student.program_id ?? student.program?.id)
+    ).length;
   }
 
   let query = admin
@@ -65,7 +67,12 @@ async function todaysEvents(today) {
   if (isLocalMode) {
     return localDb
       .listEvents()
-      .filter((event) => String(event.event_date) === today);
+      .filter(
+        (event) =>
+          String(event.event_date) === today &&
+          event.status !== "cancelled" &&
+          event.status !== "draft"
+      );
   }
 
   const { data, error } = await admin
@@ -73,24 +80,25 @@ async function todaysEvents(today) {
     .select(EVENT_SELECT)
     .eq("event_date", today)
     .is("deleted_at", null)
+    .not("status", "in", "(draft,cancelled)")
     .order("start_time", { ascending: true });
 
   if (error) throw error;
   return data || [];
 }
 
-async function nextEvent(today) {
+async function nextEvent(now) {
   if (isLocalMode) {
     return (
       localDb
         .listEvents()
-        .filter(
-          (event) =>
-            String(event.event_date) >= today &&
-            event.status !== "closed" &&
-            event.status !== "completed" &&
-            event.status !== "cancelled"
-        )
+        .filter((event) => {
+          if (["closed", "completed", "cancelled", "draft"].includes(event.status)) return false;
+          const evDate = String(event.event_date);
+          if (evDate > now.date) return true;
+          if (evDate === now.date) return String(event.end_time) > now.time;
+          return false;
+        })
         .sort((a, b) =>
           `${a.event_date}${a.start_time}`.localeCompare(`${b.event_date}${b.start_time}`)
         )[0] || null
@@ -100,49 +108,64 @@ async function nextEvent(today) {
   const { data, error } = await admin
     .from("events")
     .select(EVENT_SELECT)
-    .gte("event_date", today)
+    .gte("event_date", now.date)
     .is("deleted_at", null)
-    .not("status", "in", "(completed,cancelled)")
+    .not("status", "in", "(draft,completed,cancelled)")
     .order("event_date", { ascending: true })
     .order("start_time", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
 
   if (error) throw error;
-  return data;
+  if (!data || data.length === 0) return null;
+
+  return (
+    data.find((event) => {
+      const evDate = String(event.event_date);
+      if (evDate > now.date) return true;
+      if (evDate === now.date) return String(event.end_time) > now.time;
+      return false;
+    }) || null
+  );
 }
 
-router.get("/live", async (req, res) => {
-  const now = manilaNow();
-  const events = await todaysEvents(now.date);
-  const liveEvents = events.filter((event) => isLiveWindow(event, new Date()));
+router.get("/live", async (req, res, next) => {
+  try {
+    const now = manilaNow();
+    const events = await todaysEvents(now.date);
+    const liveEvents = events.filter((event) => isLiveWindow(event));
 
-  const live = [];
-  for (const event of liveEvents) {
-    const enrolled = await countAudience(event);
-    const rows = await attendanceRows(event.id);
+    const live = [];
+    for (const event of liveEvents) {
+      const enrolled = await countAudience(event);
+      const rows = await attendanceRows(event.id);
 
-    const present = rows.filter((row) => row.status === "present").length;
-    const late = rows.filter((row) => row.status === "late").length;
-    const absent = Math.max(0, enrolled - present - late);
+      const present = rows.filter((row) => row.status === "present").length;
+      const late = rows.filter((row) => row.status === "late").length;
+      const absent = Math.max(0, enrolled - present - late);
 
-    live.push({
-      event,
-      counts: { enrolled, present, late, absent },
-      attendance_rate: enrolled
-        ? Math.round(((present + late) / enrolled) * 100)
-        : 0,
-      recent_scans: rows.filter((row) => row.status !== "absent").slice(0, 10),
+      const counts = { enrolled, present, late, absent };
+
+      live.push({
+        event,
+        counts,
+        tally: counts,
+        attendance_rate: enrolled
+          ? Math.round(((present + late) / enrolled) * 100)
+          : 0,
+        recent_scans: rows.filter((row) => row.status !== "absent").slice(0, 10),
+      });
+    }
+
+    res.json({
+      mode: isLocalMode ? "local" : "supabase",
+      checked_at: new Date().toISOString(),
+      today: now.date,
+      live,
+      next: live.length ? null : await nextEvent(now),
     });
+  } catch (err) {
+    next(err);
   }
-
-  res.json({
-    mode: isLocalMode ? "local" : "supabase",
-    checked_at: new Date().toISOString(),
-    today: now.date,
-    live,
-    next: live.length ? null : await nextEvent(now.date),
-  });
 });
 
 module.exports = router;

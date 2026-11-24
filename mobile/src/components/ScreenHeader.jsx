@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { colors, fonts, spacing } from "../theme/tokens";
+import { colors, fonts, radius, spacing } from "../theme/tokens";
 
 export function ScreenHeader({
   title,
@@ -22,9 +22,9 @@ export function ScreenHeader({
       style={[
         styles.header,
         {
-          paddingTop: insets.top + 8,
+          paddingTop: insets.top + 10,
           backgroundColor: light ? colors.navy : colors.surface,
-          borderBottomColor: light ? "rgba(255,255,255,0.06)" : colors.border,
+          borderBottomColor: light ? "rgba(255,255,255,0.08)" : colors.border,
         },
       ]}
     >
@@ -33,8 +33,12 @@ export function ScreenHeader({
           {showBack ? (
             <Pressable
               onPress={() => router.back()}
-              hitSlop={10}
-              style={[styles.back, !light && { backgroundColor: colors.bg }]}
+              hitSlop={12}
+              style={({ pressed }) => [
+                styles.back,
+                !light && { backgroundColor: colors.bg, borderColor: colors.border },
+                pressed && { opacity: 0.75, transform: [{ scale: 0.95 }] },
+              ]}
             >
               <Ionicons name="chevron-back" size={20} color={light ? colors.white : colors.text} />
             </Pressable>
@@ -49,7 +53,7 @@ export function ScreenHeader({
               <Text
                 style={[
                   styles.subtitle,
-                  { color: light ? "rgba(255,255,255,0.66)" : colors.muted },
+                  { color: light ? "rgba(255,255,255,0.68)" : colors.muted },
                 ]}
                 numberOfLines={1}
               >
@@ -99,9 +103,11 @@ const styles = StyleSheet.create({
   back: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
 });

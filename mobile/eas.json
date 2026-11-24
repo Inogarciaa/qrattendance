@@ -7,9 +7,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://lacoqr-api.onrender.com/api",
-        "EXPO_PUBLIC_SUPABASE_URL": "https://nmdawclfdvujqvxquvdr.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_lX35SYvGBWigULJukpmNPw_2N_4lPp4"
+        "EXPO_PUBLIC_API_URL": "https://lacoqr-api.onrender.com/api"
       }
     },
     "preview": {
@@ -18,17 +16,13 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://lacoqr-api.onrender.com/api",
-        "EXPO_PUBLIC_SUPABASE_URL": "https://nmdawclfdvujqvxquvdr.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_lX35SYvGBWigULJukpmNPw_2N_4lPp4"
+        "EXPO_PUBLIC_API_URL": "https://lacoqr-api.onrender.com/api"
       }
     },
     "production": {
-      "autoIncrement": true,
+      "autoIncremxent": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://lacoqr-api.onrender.com/api",
-        "EXPO_PUBLIC_SUPABASE_URL": "https://nmdawclfdvujqvxquvdr.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_lX35SYvGBWigULJukpmNPw_2N_4lPp4"
+        "EXPO_PUBLIC_API_URL": "https://lacoqr-api.onrender.com/api"
       }
     }
   },

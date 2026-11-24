@@ -65,9 +65,9 @@ export default function LoginPage({ onLogin }) {
           </p>
 
           <div className="login-badges">
-            <span>Anti-proxy</span>
-            <span>30s rotation</span>
-            <span>Real-time</span>
+            <span><Icon name="shield" /> Anti-proxy</span>
+            <span><Icon name="refresh" /> 30s rotation</span>
+            <span><Icon name="clock" /> Real-time tracking</span>
           </div>
         </section>
 

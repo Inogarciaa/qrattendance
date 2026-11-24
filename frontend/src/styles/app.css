@@ -1577,7 +1577,7 @@ details p {
   gap: 0;
   padding: 60px 68px;
   color: white;
-  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #312e81 100%);
+  background: linear-gradient(135deg, #312e81 0%, #ffffff 100%);
 }
 
 .login-hero::before {
@@ -1588,7 +1588,7 @@ details p {
   width: 380px;
   height: 380px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255,255,255,0.05);
 }
 
 .login-hero::after {
@@ -1599,7 +1599,7 @@ details p {
   width: 320px;
   height: 320px;
   border-radius: 50%;
-  background: rgba(79,70,229,0.2);
+  background: rgba(49, 46, 129, 0.1);
 }
 
 .login-brand {

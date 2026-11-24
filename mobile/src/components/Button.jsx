@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors, fonts, radius } from "../theme/tokens";
@@ -6,13 +7,13 @@ import { colors, fonts, radius } from "../theme/tokens";
 const VARIANTS = {
   primary: {
     backgroundColor: colors.brand,
-    borderColor: colors.brand,
+    borderColor: colors.brandDark,
     label: colors.white,
     icon: colors.white,
   },
   navy: {
     backgroundColor: colors.navy,
-    borderColor: colors.navy,
+    borderColor: colors.navy2,
     label: colors.white,
     icon: colors.white,
   },
@@ -24,7 +25,7 @@ const VARIANTS = {
   },
   soft: {
     backgroundColor: colors.tint,
-    borderColor: colors.tint,
+    borderColor: "#c7d2fe",
     label: colors.brandDark,
     icon: colors.brandDark,
   },
@@ -42,7 +43,7 @@ const VARIANTS = {
   },
 };
 
-const HEIGHTS = { lg: 52, md: 44, sm: 36 };
+const HEIGHTS = { lg: 50, md: 42, sm: 36 };
 
 export function Button({
   label,
@@ -59,11 +60,20 @@ export function Button({
   const palette = VARIANTS[variant] || VARIANTS.primary;
   const inactive = disabled || loading;
 
+  const handlePress = (e) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      // Haptics is non-critical
+    }
+    onPress?.(e);
+  };
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      onPress={onPress}
+      onPress={handlePress}
       disabled={inactive}
       style={({ pressed }) => [
         styles.base,
@@ -71,7 +81,9 @@ export function Button({
           height: HEIGHTS[size],
           backgroundColor: palette.backgroundColor,
           borderColor: palette.borderColor,
+          transform: [{ scale: pressed && !inactive ? 0.98 : 1 }],
         },
+        variant === "primary" && styles.primaryShadow,
         size === "sm" && styles.smallPadding,
         pressed && !inactive && styles.pressed,
         inactive && styles.disabled,
@@ -105,12 +117,19 @@ const styles = StyleSheet.create({
   base: {
     borderRadius: radius.md,
     borderWidth: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     alignItems: "center",
     justifyContent: "center",
   },
+  primaryShadow: {
+    shadowColor: colors.brand,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 3,
+  },
   smallPadding: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderRadius: radius.sm,
   },
   content: {
@@ -121,13 +140,12 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.semibold,
-    letterSpacing: 0,
+    letterSpacing: -0.2,
   },
   pressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.9,
   },
   disabled: {
-    opacity: 0.55,
+    opacity: 0.45,
   },
 });

@@ -25,6 +25,8 @@ const PATHS = {
   x: "M18 6L6 18M6 6l12 12",
   chevronRight: "M9 18l6-6-6-6",
   hist: "M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 7v5l3 2M2.5 5.5v5h5",
+  shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  clock: "M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2",
 };
 
 export default function Icon({ name, className = "i" }) {

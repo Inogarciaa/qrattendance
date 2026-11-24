@@ -28,11 +28,13 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 60,
     height: 60,
-    borderRadius: 18,
+    borderRadius: 20,
     backgroundColor: colors.tint,
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
+    marginBottom: 16,
   },
   title: {
     fontFamily: fonts.semibold,

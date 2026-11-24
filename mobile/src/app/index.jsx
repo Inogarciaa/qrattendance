@@ -129,9 +129,10 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.top, { paddingTop: insets.top + 40 }]}>
-            <LogoMark size={44} fontSize={16} />
+          <View style={[styles.top, { paddingTop: insets.top + 36 }]}>
+            <LogoMark size={48} fontSize={17} />
             <Text style={styles.brand}>LacoQR</Text>
+            <Text style={styles.brandTagline}>Dynamic QR Attendance</Text>
           </View>
 
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 32 }]}>
@@ -459,7 +460,13 @@ const styles = StyleSheet.create({
     fontSize: 22,
     letterSpacing: -0.6,
     color: colors.white,
-    marginTop: 12,
+    marginTop: 10,
+  },
+  brandTagline: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.65)",
+    marginTop: 3,
   },
   sheet: {
     flex: 1,
@@ -525,6 +532,13 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   tabText: {
     fontFamily: fonts.semibold,
@@ -547,7 +561,7 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 52,
     borderRadius: radius.md,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 14,

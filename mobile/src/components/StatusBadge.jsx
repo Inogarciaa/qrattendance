@@ -1,10 +1,20 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { fonts, radius, statusColors } from "../theme/tokens";
+
 export function StatusBadge({ status, label, dot = true, style }) {
   const palette = statusColors[status] || statusColors.closed;
   return (
-    <View style={[styles.badge, { backgroundColor: palette.bg }, style]}>
+    <View
+      style={[
+        styles.badge,
+        {
+          backgroundColor: palette.bg,
+          borderColor: palette.border || palette.fg,
+        },
+        style,
+      ]}
+    >
       {dot ? <View style={[styles.dot, { backgroundColor: palette.fg }]} /> : null}
       <Text style={[styles.text, { color: palette.fg }]}>{label || palette.label}</Text>
     </View>
@@ -15,10 +25,11 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingVertical: 3.5,
     borderRadius: radius.pill,
+    borderWidth: 1,
     alignSelf: "flex-start",
   },
   dot: {
@@ -29,6 +40,6 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: fonts.semibold,
     fontSize: 11,
-    letterSpacing: 0,
+    letterSpacing: 0.1,
   },
 });

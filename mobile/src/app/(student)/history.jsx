@@ -214,6 +214,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     paddingVertical: 14,
     paddingHorizontal: spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   summaryItem: {
     flex: 1,
@@ -221,29 +223,31 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontFamily: fonts.bold,
-    fontSize: 18,
+    fontSize: 19,
     letterSpacing: -0.4,
     color: colors.text,
   },
   summaryLabel: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.semibold,
     fontSize: 11,
     color: colors.muted,
-    marginTop: 1,
+    marginTop: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   summaryDivider: {
     width: 1,
-    height: 26,
+    height: 28,
     backgroundColor: colors.border,
   },
   filters: {
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: spacing.xl,
-    paddingTop: 14,
+    paddingTop: 16,
   },
   chip: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
@@ -251,8 +255,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   chipActive: {
-    backgroundColor: colors.navy,
-    borderColor: colors.navy,
+    backgroundColor: colors.brand,
+    borderColor: colors.brandDark,
   },
   chipText: {
     fontFamily: fonts.medium,
@@ -260,6 +264,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   chipTextActive: {
+    fontFamily: fonts.semibold,
     color: colors.white,
   },
   loading: {

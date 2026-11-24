@@ -9,8 +9,7 @@ This is the working data model for LacoQR. It combines:
 
 Status labels used below:
 
-- **Implemented** — already in `supabase/migrations/0001_schema.sql`.
-- **Proposed** — recommended addition; not yet applied.
+- **Implemented** — existing in the current Supabase schema.
 - **Derived** — calculated at read time; not stored (except summaries).
 
 ---
@@ -28,8 +27,8 @@ Status labels used below:
 | Who actually attended? | `attendance` |
 | What scans were attempted or rejected? | `scan_attempts` |
 | What are the final totals? | `event_summaries` |
-| Who exported a report? | `report_exports` (proposed) |
-| Who changed sensitive data? | `audit_logs` (proposed) |
+| Who exported a report? | `audit_log` |
+| Who changed sensitive data? | `audit_log` |
 
 ---
 
