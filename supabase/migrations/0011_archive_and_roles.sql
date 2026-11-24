@@ -50,14 +50,13 @@ as $$
   );
 $$;
 
--- 4. Apply RLS/Policies for soft-delete (example for profiles)
--- This assumes policies exist, we replace them to enforce deleted_at is null for non-superadmins
+-- 4. Profile visibility
+-- Permissive policies are OR'd. A rule of "deleted_at is null" would let every
+-- signed-in user read every profile, including birthdates, which are the
+-- imported-account passwords. Drop that policy if an earlier edit created it.
+-- The replacement rules live in 0012_close_access_holes.sql.
 alter table public.profiles enable row level security;
 drop policy if exists profiles_read on public.profiles;
-create policy profiles_read on public.profiles
-  for select to authenticated using (
-    public.is_superadmin() or deleted_at is null
-  );
 
 -- Notify pgrst to refresh cache
 notify pgrst, 'reload schema';

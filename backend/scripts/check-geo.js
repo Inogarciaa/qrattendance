@@ -42,22 +42,27 @@ assert.equal(unfenced.applied, false);
 assert.equal(unfenced.allowed, true);
 assert.equal(unfenced.verified, null);
 
-// No fix: allowed, flagged.
+// No fix: rejected. Omitting GPS used to count as present.
 const noFix = evaluateGeofence(event, null);
-assert.equal(noFix.allowed, true);
+assert.equal(noFix.allowed, false);
 assert.equal(noFix.verified, false);
-assert.equal(noFix.reason, "location_unverified");
+assert.equal(noFix.reason, "location_required");
 
-// Fix too imprecise to trust: allowed, flagged.
+// Fix too imprecise to trust: rejected, even if the coordinates are far away.
 const rough = evaluateGeofence(event, { ...north(5000), accuracy: MAX_ACCURACY_M + 1, mocked: false });
-assert.equal(rough.allowed, true);
+assert.equal(rough.allowed, false);
 assert.equal(rough.reason, "location_unverified");
 
-// Mocked location: allowed, flagged, and distance is not recorded.
+// Mocked location: rejected, and distance is not recorded.
 const mocked = evaluateGeofence(event, { ...north(5000), accuracy: 5, mocked: true });
-assert.equal(mocked.allowed, true);
-assert.equal(mocked.reason, "location_unverified");
+assert.equal(mocked.allowed, false);
+assert.equal(mocked.reason, "location_mocked");
 assert.equal(mocked.distance_m, null);
+
+// A precise fix with no accuracy figure is not evidence.
+const noAccuracy = evaluateGeofence(event, { ...north(10), accuracy: null, mocked: false });
+assert.equal(noAccuracy.allowed, false);
+assert.equal(noAccuracy.reason, "location_unverified");
 
 // Inside the fence.
 const inside = evaluateGeofence(event, { ...north(40), accuracy: 8, mocked: false });

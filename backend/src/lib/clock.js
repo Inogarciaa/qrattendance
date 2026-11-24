@@ -41,7 +41,8 @@ function timeToMinutes(value) {
 /** True when `at` falls inside the event's date and start/end window. */
 function isLiveWindow(event, at = new Date()) {
   if (!event?.event_date || !event?.start_time || !event?.end_time) return false;
-  if (event.status === "completed" || event.status === "cancelled" || event.status === "closed") {
+  // Drafts are not open yet. Completed, cancelled, and closed are finished.
+  if (event.status === "draft" || event.status === "completed" || event.status === "cancelled" || event.status === "closed") {
     return false;
   }
 

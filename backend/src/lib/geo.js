@@ -7,10 +7,10 @@
  *
  * Policy decisions live here so the route stays readable:
  *   - an event without coordinates has no fence at all;
- *   - a missing, mocked or too-imprecise fix is accepted but flagged, because
- *     locking a student out over a bad GPS reading inside a concrete building
- *     is a worse failure than an unverified row;
- *   - only a trustworthy fix outside the radius is rejected.
+ *   - when a fence exists, only a precise, non-mocked fix inside the radius
+ *     is accepted. A missing, mocked, or too-imprecise fix is rejected:
+ *     accepting those let a forwarded screenshot check in from anywhere;
+ *   - a trustworthy fix outside the radius is rejected as out of area.
  */
 
 const EARTH_RADIUS_M = 6371008.8;
@@ -114,20 +114,22 @@ function evaluateGeofence(event, fix) {
   if (!isFenced(event)) return untouched;
 
   const radius = fenceRadius(event);
-  const unverified = {
+  const denied = (reason) => ({
     applied: true,
-    allowed: true,
+    allowed: false,
     verified: false,
-    reason: "location_unverified",
+    reason,
     distance_m: null,
     accuracy_m: fix?.accuracy ?? null,
     radius_m: radius,
     mocked: Boolean(fix?.mocked),
-  };
+  });
 
-  if (!fix) return unverified;
-  if (fix.mocked) return unverified;
-  if (fix.accuracy !== null && fix.accuracy > MAX_ACCURACY_M) return unverified;
+  // No coordinates, a simulated position, or a fix too coarse to trust cannot
+  // prove the phone is at the venue. Reject instead of recording a present.
+  if (!fix) return denied("location_required");
+  if (fix.mocked) return denied("location_mocked");
+  if (fix.accuracy === null || fix.accuracy > MAX_ACCURACY_M) return denied("location_unverified");
 
   const distance = round(distanceMeters(event, fix));
 
