@@ -3,12 +3,10 @@ import Svg, { Circle } from "react-native-svg";
 
 import { colors, fonts } from "../theme/tokens";
 
-export function CountdownRing({ progress = 1, seconds = 0, size = 52, stroke = 4 }) {
+export function CountdownRing({ progress = 1, seconds = 0, size = 50, stroke = 4 }) {
   const radiusValue = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radiusValue;
   const clamped = Math.max(0, Math.min(1, progress));
-  const isExpiringSoon = seconds <= 5;
-  const strokeColor = isExpiringSoon ? colors.amber : colors.brand;
 
   return (
     <View style={{ width: size, height: size }}>
@@ -25,7 +23,7 @@ export function CountdownRing({ progress = 1, seconds = 0, size = 52, stroke = 4
           cx={size / 2}
           cy={size / 2}
           r={radiusValue}
-          stroke={strokeColor}
+          stroke={seconds <= 5 ? colors.amber : colors.brand}
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"
@@ -35,7 +33,7 @@ export function CountdownRing({ progress = 1, seconds = 0, size = 52, stroke = 4
         />
       </Svg>
       <View style={styles.center}>
-        <Text style={[styles.text, isExpiringSoon && { color: colors.amber }]}>{seconds}</Text>
+        <Text style={styles.text}>{seconds}</Text>
       </View>
     </View>
   );
@@ -48,7 +46,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   text: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.semibold,
     fontSize: 13,
     color: colors.text,
   },

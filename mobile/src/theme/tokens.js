@@ -1,32 +1,32 @@
 export const colors = {
   navy: "#0f172a",
   navy2: "#1e293b",
-  brand: "#4f46e5",
-  brandDark: "#4338ca",
-  brandLight: "#6366f1",
-  green: "#10b981",
+  brand: "#2563eb",
+  brandDark: "#1d4ed8",
+  brandLight: "#3b82f6",
+  green: "#059669",
   greenSoft: "#ecfdf5",
-  amber: "#f59e0b",
+  amber: "#d97706",
   amberSoft: "#fffbeb",
-  red: "#ef4444",
+  red: "#dc2626",
   redSoft: "#fef2f2",
-  bg: "#f8fafc",
+  bg: "#f6f7f9",
   surface: "#ffffff",
-  text: "#0f172a",
-  muted: "#64748b",
-  border: "#e2e8f0",
-  tint: "#eef2ff",
+  text: "#111827",
+  muted: "#6b7280",
+  border: "#e9edf2",
+  tint: "#eff4ff",
   white: "#ffffff",
-  overlay: "rgba(15, 23, 42, 0.6)",
+  overlay: "rgba(15, 23, 42, 0.55)",
 };
 
 export const statusColors = {
-  present: { fg: "#059669", bg: "#ecfdf5", border: "#a7f3d0", label: "Present" },
-  late: { fg: "#d97706", bg: "#fffbeb", border: "#fde68a", label: "Late" },
-  absent: { fg: "#dc2626", bg: "#fef2f2", border: "#fecaca", label: "Absent" },
-  live: { fg: "#059669", bg: "#ecfdf5", border: "#a7f3d0", label: "Live" },
-  upcoming: { fg: "#4f46e5", bg: "#eef2ff", border: "#c7d2fe", label: "Upcoming" },
-  closed: { fg: "#64748b", bg: "#f1f5f9", border: "#e2e8f0", label: "Closed" },
+  present: { fg: colors.green, bg: colors.greenSoft, label: "Present" },
+  late: { fg: colors.amber, bg: colors.amberSoft, label: "Late" },
+  absent: { fg: colors.red, bg: colors.redSoft, label: "Absent" },
+  live: { fg: colors.green, bg: colors.greenSoft, label: "Live" },
+  upcoming: { fg: colors.brand, bg: colors.tint, label: "Upcoming" },
+  closed: { fg: colors.muted, bg: "#f3f4f6", label: "Closed" },
 };
 
 export const spacing = {
@@ -40,33 +40,25 @@ export const spacing = {
 };
 
 export const radius = {
-  xs: 6,
-  sm: 10,
+  sm: 12,
   md: 14,
-  lg: 18,
-  xl: 24,
+  lg: 20,
+  xl: 26,
   pill: 999,
 };
 
 export const shadow = {
   card: {
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 18,
     elevation: 2,
-  },
-  cardElevated: {
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 4,
   },
   floating: {
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 0.12,
     shadowRadius: 28,
     elevation: 8,
   },
@@ -81,9 +73,9 @@ export const fonts = {
 };
 
 export const type = {
-  h1: { fontFamily: fonts.bold, fontSize: 24, letterSpacing: -0.6, color: colors.text },
-  h2: { fontFamily: fonts.bold, fontSize: 18, letterSpacing: -0.3, color: colors.text },
-  h3: { fontFamily: fonts.semibold, fontSize: 15, letterSpacing: -0.2, color: colors.text },
+  h1: { fontFamily: fonts.bold, fontSize: 25, letterSpacing: -0.7, color: colors.text },
+  h2: { fontFamily: fonts.bold, fontSize: 19, letterSpacing: -0.4, color: colors.text },
+  h3: { fontFamily: fonts.semibold, fontSize: 15.5, letterSpacing: -0.2, color: colors.text },
   body: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
   bodyStrong: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
   small: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },

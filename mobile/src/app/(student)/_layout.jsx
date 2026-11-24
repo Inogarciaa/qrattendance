@@ -24,6 +24,8 @@ export default function StudentLayout() {
 
   if (!user) return <Redirect href="/" />;
   if (accountStatus && accountStatus !== "ready") return <Redirect href="/" />;
+  // Never redirect into the organizer group: index.jsx picks the right home for
+  // the role, so a staff account cannot bounce between the two tab groups.
   if (user.role !== "student") return <Redirect href="/" />;
 
   return (
@@ -32,18 +34,17 @@ export default function StudentLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.brand,
-        tabBarInactiveTintColor: "#94a3b8",
+        tabBarInactiveTintColor: "#9ca3af",
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          paddingTop: 6,
-          height: 60,
+          paddingTop: 8,
         },
         tabBarLabelStyle: {
-          fontFamily: fonts.semibold,
-          fontSize: 11,
-          marginBottom: 6,
+          fontFamily: fonts.medium,
+          fontSize: 10.5,
+          marginBottom: 3,
         },
         tabBarHideOnKeyboard: true,
       }}

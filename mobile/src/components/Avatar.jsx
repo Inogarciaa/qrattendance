@@ -4,6 +4,7 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import { colors, fonts } from "../theme/tokens";
 
 export function Avatar({ name = "", uri = null, size = 44, tone = "light", style }) {
+  // Remember which URL failed; a new upload gets a new URL and another chance.
   const [brokenUri, setBrokenUri] = useState(null);
 
   const label = name
@@ -24,8 +25,8 @@ export function Avatar({ name = "", uri = null, size = 44, tone = "light", style
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: dark ? "rgba(255,255,255,0.12)" : colors.tint,
-          borderColor: dark ? "rgba(255,255,255,0.22)" : "#c7d2fe",
+          backgroundColor: dark ? "rgba(255,255,255,0.14)" : colors.tint,
+          borderColor: dark ? "rgba(255,255,255,0.22)" : "#dbeafe",
         },
         style,
       ]}
@@ -43,7 +44,7 @@ export function Avatar({ name = "", uri = null, size = 44, tone = "light", style
             styles.text,
             {
               color: dark ? colors.white : colors.brandDark,
-              fontSize: size * 0.36,
+              fontSize: size * 0.34,
             },
           ]}
         >
@@ -58,7 +59,7 @@ const styles = StyleSheet.create({
   base: {
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.5,
+    borderWidth: 1,
     overflow: "hidden",
   },
   text: {

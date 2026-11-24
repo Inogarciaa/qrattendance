@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     paddingTop: 14,
   },
   chip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 13,
     paddingVertical: 7,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   chipActive: {
-    backgroundColor: colors.brand,
-    borderColor: colors.brandDark,
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
   },
   chipText: {
     fontFamily: fonts.medium,
@@ -293,7 +293,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   chipTextActive: {
-    fontFamily: fonts.semibold,
     color: colors.white,
   },
   loading: {
