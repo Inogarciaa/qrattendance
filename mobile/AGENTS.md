@@ -40,9 +40,25 @@ Docs: https://docs.expo.dev/eas/index.md
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
 
+## Design
+
+`design-dna` (repo root `.agents/skills/design-dna`) is the design reference for
+this app and is **required** for UI work:
+
+1. Load it with the `skill` tool before changing screens, layout, colors,
+   typography, spacing, icons, or shared components.
+2. Apply its `design_system` tokens. The app's tokens live in
+   `src/theme/tokens.js` and shared UI in `src/components/`; do not hard-code
+   one-off colors or spacing in screens.
+3. When a reference screenshot is involved, use the skill's Phase 2 analysis
+   flow and its measurement scripts instead of guessing colors.
+4. React Native cannot run Canvas, WebGL, or shaders. Use only the
+   `design_system` and `design_style` dimensions, and approximate
+   `visual_effects` with RN primitives such as `expo-linear-gradient` and
+   `react-native-svg`.
+
 ## Skills
 
 Project skills live in the repo-root `.agents/skills/` and are available from
-this folder too. `design-dna` covers design tokens, style extraction from
-screenshots, and visual effects; load it with the `skill` tool when the task
-matches its description. Global skills live in `~/.agents/skills/`.
+this folder too. Global skills live in `~/.agents/skills/` (for example
+`find-skills`).

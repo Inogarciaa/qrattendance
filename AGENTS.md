@@ -59,10 +59,16 @@ Run the checks for the app you touched before declaring work done.
   numbered file (and keep `supabase/apply_all.sql` in sync if you use it).
 - Follow each app's guide: `backend/AGENTS.md`, `frontend/AGENTS.md`,
   `mobile/AGENTS.md`.
+- **Design changes go through `design-dna`.** Before changing UI, layout,
+  styling, colors, typography, spacing, icons, or shared components, load the
+  `design-dna` skill and work from its three dimensions (`design_system`,
+  `design_style`, `visual_effects`). Do not introduce ad-hoc colors, spacing, or
+  type scales.
 
 ## Skills
 
 Project skills live in `.agents/skills/` and are discovered from any folder in
-the repo. `design-dna` covers design tokens, style extraction from screenshots,
-and visual effects — load it before redesigning UI. Global skills live in
-`~/.agents/skills/` (for example `find-skills`).
+the repo. `design-dna` is this repo's design reference and is required for any
+UI or design work — load it with the `skill` tool before touching screens,
+tokens, or styles. Global skills live in `~/.agents/skills/` (for example
+`find-skills`).
