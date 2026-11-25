@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "LacoQR",
+    "name": "Scanly",
     "slug": "lacoqr",
     "scheme": "lacoqr",
     "owner": "tsmvipe",
@@ -12,13 +12,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lacoqr.mobile",
       "infoPlist": {
-        "NSCameraUsageDescription": "LacoQR uses your camera to scan event attendance QR codes."
+        "NSCameraUsageDescription": "Scanly uses your camera to scan event attendance QR codes."
       }
     },
     "android": {
       "package": "com.lacoqr.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#0f1c3f",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -39,7 +39,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "LacoQR uses your camera to scan event attendance QR codes.",
+          "cameraPermission": "Scanly uses your camera to scan event attendance QR codes.",
           "recordAudioAndroid": false
         }
       ],
@@ -48,14 +48,14 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "LacoQR uses your photo library so you can add a profile picture.",
-          "cameraPermission": "LacoQR uses your camera so you can take a profile picture."
+          "photosPermission": "Scanly uses your photo library so you can add a profile picture.",
+          "cameraPermission": "Scanly uses your camera so you can take a profile picture."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "LacoQR checks that your phone is at the event venue when you check in."
+          "locationWhenInUsePermission": "Scanly checks that your phone is at the event venue when you check in."
         }
       ]
     ],

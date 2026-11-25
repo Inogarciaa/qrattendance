@@ -1,4 +1,4 @@
-# LacoQR Backend
+# Scanly Backend
 
 Express API layer over Supabase (Postgres + Auth + Realtime + Storage) for the dynamic QR
 attendance system. Serves the admin web app and the organizer / student mobile apps.

@@ -1,7 +1,7 @@
 # Context Flow Diagram and Data Flow Diagrams
 
 This document contains the context flow diagram (CFD) and the leveled data flow
-diagrams (DFD) for **LacoQR**, the dynamic QR attendance system described in
+diagrams (DFD) for **Scanly**, the dynamic QR attendance system described in
 `docs/PROJECT_ANALYSIS.md` and `docs/DATA_MODEL.md`.
 
 The diagrams are written in Mermaid so they can be version-controlled, reviewed
@@ -51,7 +51,7 @@ The diagrams use **Yourdon/DeMarco** notation.
 
 ## 2. System boundary and actors
 
-**Inside the boundary:** the LacoQR web dashboard, mobile app, Express REST API,
+**Inside the boundary:** the Scanly web dashboard, mobile app, Express REST API,
 token service, attendance service, and the Supabase Postgres database.
 
 **Outside the boundary:** the four human roles, Supabase Auth, Supabase Storage,
@@ -83,7 +83,7 @@ flowchart LR
   STOR[[Supabase Storage]]
   RT[[Supabase Realtime]]
 
-  SYS((0<br/>LacoQR<br/>Dynamic QR<br/>Attendance<br/>System))
+  SYS((0<br/>Scanly<br/>Dynamic QR<br/>Attendance<br/>System))
 
   SUP -->|"account, program, and setting requests; audit queries"| SYS
   SYS -->|"account lists, global settings, audit trail"| SUP
@@ -123,20 +123,20 @@ flowchart LR
 
 | # | Flow | Source | Destination | Composition |
 | --- | --- | --- | --- | --- |
-| C1 | Account and setting request | Superadmin | 0 LacoQR | Account action, program record, setting key/value, audit filter |
-| C2 | Administration result | 0 LacoQR | Superadmin | Account list, program list, settings, audit entries |
-| C3 | Admin request | Admin | 0 LacoQR | School ID + birthdate, event fields, organizer IDs, program IDs, report filters, close command |
-| C4 | Admin result | 0 LacoQR | Admin | Access token, event list/detail, tally, dashboard rows, CSV file |
-| C5 | Organizer request | Organizer | 0 LacoQR | School ID + birthdate, event ID, student QR token, confirm/cancel flag |
-| C6 | Organizer result | 0 LacoQR | Organizer | Assigned events, verification card, attendance result, counts |
-| C7 | Student request | Student | 0 LacoQR | School ID + birthdate, event ID, event QR token |
-| C8 | Student result | 0 LacoQR | Student | Access token, personal QR token + expiry, attendance history, check-in result |
-| C9 | Credential verification | 0 LacoQR | Supabase Auth | Synthetic email, derived password, refresh token |
-| C10 | Session | Supabase Auth | 0 LacoQR | User ID, access token, refresh token, expiry |
-| C11 | Photo request | 0 LacoQR | Supabase Storage | Authenticated photo path or signed URL request |
-| C12 | Student photo | Supabase Storage | 0 LacoQR | Image bytes or signed URL |
-| C13 | Attendance publication | 0 LacoQR | Supabase Realtime | Inserted or updated attendance row |
-| C14 | Realtime change | Supabase Realtime | 0 LacoQR | Attendance change event with row payload |
+| C1 | Account and setting request | Superadmin | 0 Scanly | Account action, program record, setting key/value, audit filter |
+| C2 | Administration result | 0 Scanly | Superadmin | Account list, program list, settings, audit entries |
+| C3 | Admin request | Admin | 0 Scanly | School ID + birthdate, event fields, organizer IDs, program IDs, report filters, close command |
+| C4 | Admin result | 0 Scanly | Admin | Access token, event list/detail, tally, dashboard rows, CSV file |
+| C5 | Organizer request | Organizer | 0 Scanly | School ID + birthdate, event ID, student QR token, confirm/cancel flag |
+| C6 | Organizer result | 0 Scanly | Organizer | Assigned events, verification card, attendance result, counts |
+| C7 | Student request | Student | 0 Scanly | School ID + birthdate, event ID, event QR token |
+| C8 | Student result | 0 Scanly | Student | Access token, personal QR token + expiry, attendance history, check-in result |
+| C9 | Credential verification | 0 Scanly | Supabase Auth | Synthetic email, derived password, refresh token |
+| C10 | Session | Supabase Auth | 0 Scanly | User ID, access token, refresh token, expiry |
+| C11 | Photo request | 0 Scanly | Supabase Storage | Authenticated photo path or signed URL request |
+| C12 | Student photo | Supabase Storage | 0 Scanly | Image bytes or signed URL |
+| C13 | Attendance publication | 0 Scanly | Supabase Realtime | Inserted or updated attendance row |
+| C14 | Realtime change | Supabase Realtime | 0 Scanly | Attendance change event with row payload |
 
 ---
 

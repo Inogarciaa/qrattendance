@@ -1,4 +1,4 @@
-# Deploying LacoQR
+# Deploying Scanly
 
 Three parts deploy separately:
 

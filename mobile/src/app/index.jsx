@@ -130,8 +130,8 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.top, { paddingTop: insets.top + 40 }]}>
-            <LogoMark size={44} fontSize={16} />
-            <Text style={styles.brand}>LacoQR</Text>
+            <LogoMark size={44} />
+            <Text style={styles.brand}>Scanly</Text>
           </View>
 
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 32 }]}>
@@ -293,7 +293,7 @@ export default function LoginScreen() {
 
             {supabaseConfigured ? (
               <View style={styles.signupCard}>
-                <Text style={styles.signupTitle}>New to LacoQR?</Text>
+                <Text style={styles.signupTitle}>New to Scanly?</Text>
                 <Text style={styles.signupHint}>
                   Create an account with Google. An administrator approves new accounts
                   before they can check in.
@@ -396,7 +396,7 @@ function ServerSheet({ visible, current, onClose, onSave }) {
           <View style={styles.handle} />
           <Text style={styles.sheetTitle}>Server</Text>
           <Text style={styles.sheetHint}>
-            The address of the LacoQR API this phone should talk to. Use your computer&apos;s
+            The address of the Scanly API this phone should talk to. Use your computer&apos;s
             tunnel URL when the dashboard runs on a laptop.
           </Text>
 

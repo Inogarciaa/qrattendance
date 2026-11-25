@@ -1,6 +1,6 @@
 # Data Requirements and Model
 
-This is the working data model for LacoQR. It combines:
+This is the working data model for Scanly. It combines:
 
 - the entity list and relationships in the supplied ERD;
 - the requirements in `Dynamic QR Attendance.pdf`;

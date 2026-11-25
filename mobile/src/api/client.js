@@ -4,7 +4,7 @@ import { getItem, removeItem, setItem } from "../lib/storage";
 import { formatClock, formatEventDate, formatTimeRange, formatTimestamp } from "../lib/format";
 
 /**
- * HTTP boundary for the LacoQR API.
+ * HTTP boundary for the Scanly API.
  *
  * Nothing in here is mocked: every function talks to the Express backend, which
  * in turn talks to Supabase. Screens never call `fetch` directly.

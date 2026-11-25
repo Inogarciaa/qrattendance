@@ -38,7 +38,7 @@ export default function StaffOnlyScreen() {
 
         <Text style={styles.body}>
           This account is a staff account. Admins and superadmins manage events, students and
-          reports from the LacoQR dashboard on a computer. The phone app is only for students
+          reports from the Scanly dashboard on a computer. The phone app is only for students
           and organizers.
         </Text>
 

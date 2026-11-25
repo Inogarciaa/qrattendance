@@ -25,7 +25,7 @@ const PROFILE_SETTINGS = [
   { id: "notifications", label: "Notifications", icon: "notifications-outline", detail: "On" },
   { id: "security", label: "Security", icon: "shield-checkmark-outline", detail: "School ID login" },
   { id: "help", label: "Help & Support", icon: "help-circle-outline", detail: "" },
-  { id: "about", label: "About LacoQR", icon: "information-circle-outline", detail: "v1.0.0" },
+  { id: "about", label: "About Scanly", icon: "information-circle-outline", detail: "v1.0.0" },
 ];
 
 // The picker returns JPEG data whenever `base64` is on.
@@ -284,7 +284,7 @@ export function ProfileScreen() {
 
       <Sheet
         visible={sheet === "logout"}
-        title="Log out of LacoQR?"
+        title="Log out of Scanly?"
         bottomInset={insets.bottom}
         onClose={() => setSheet(null)}
       >

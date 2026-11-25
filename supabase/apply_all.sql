@@ -1,4 +1,4 @@
-﻿-- LacoQR: full schema, RLS policies and seed programs.
+-- Scanly: full schema, RLS policies and seed programs.
 -- Paste this whole file into the Supabase SQL editor and run it once.
 
 -- ===== migrations\0001_schema.sql =====

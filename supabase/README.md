@@ -1,4 +1,4 @@
-# LacoQR Database
+# Scanly Database
 
 PostgreSQL schema for the dynamic QR attendance system, designed for Supabase.
 This folder defines the database only; the API in `backend/` talks to it.
@@ -287,7 +287,7 @@ uses Gmail SMTP with an app password:
   prints the numeric code. Supabase provides `{{ .Token }}` for this:
 
   ```html
-  <p>Your LacoQR verification code is:</p>
+  <p>Your Scanly verification code is:</p>
   <h2 style="letter-spacing:6px">{{ .Token }}</h2>
   <p>It expires in an hour. If you did not ask for this, ignore this email.</p>
   ```

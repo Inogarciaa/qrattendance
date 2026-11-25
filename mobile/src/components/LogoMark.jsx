@@ -1,31 +1,32 @@
-import { LinearGradient } from "expo-linear-gradient";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 
 import { colors, fonts } from "../theme/tokens";
 
-export function LogoMark({ size = 40, fontSize = 15 }) {
+export function LogoMark({ size = 40 }) {
   return (
-    <LinearGradient
-      colors={["#3b82f6", "#1d4ed8"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+    <View
       style={[
         styles.tile,
-        { width: size, height: size, borderRadius: size * 0.28 },
+        { width: size, height: size, borderRadius: size * 0.26 },
       ]}
     >
-      <Text style={[styles.text, { fontSize }]}>LQ</Text>
-    </LinearGradient>
+      <Image
+        source={require("../../assets/logo-mark.png")}
+        style={styles.image}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+      />
+    </View>
   );
 }
 
 export function Wordmark({ light = false, compact = false }) {
   return (
     <View style={styles.row}>
-      <LogoMark size={compact ? 32 : 40} fontSize={compact ? 12 : 15} />
+      <LogoMark size={compact ? 32 : 40} />
       <View>
         <Text style={[styles.brand, { color: light ? colors.white : colors.text }, compact && { fontSize: 18 }]}>
-          LacoQR
+          Scanly
         </Text>
         {!compact && (
           <Text style={[styles.tagline, { color: light ? "rgba(255,255,255,0.62)" : colors.muted }]}>
@@ -39,18 +40,17 @@ export function Wordmark({ light = false, compact = false }) {
 
 const styles = StyleSheet.create({
   tile: {
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#2563eb",
+    overflow: "hidden",
+    backgroundColor: colors.white,
+    shadowColor: colors.navy,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.28,
     shadowRadius: 12,
     elevation: 6,
   },
-  text: {
-    color: colors.white,
-    fontFamily: fonts.extrabold,
-    letterSpacing: -0.4,
+  image: {
+    width: "100%",
+    height: "100%",
   },
   row: {
     flexDirection: "row",

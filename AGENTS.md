@@ -1,4 +1,4 @@
-# LacoQR — repository guide
+# Scanly — repository guide
 
 Dynamic QR attendance system for LCCB. Three apps live in one repo with no
 workspace tooling: each folder has its own `package.json` and `node_modules`.

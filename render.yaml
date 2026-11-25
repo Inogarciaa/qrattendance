@@ -1,4 +1,4 @@
-# Render Blueprint for the LacoQR API.
+# Render Blueprint for the Scanly API.
 #
 # In the Render dashboard: New + > Blueprint, pick this repository, and Render
 # reads this file. Variables marked `sync: false` are prompted for on creation

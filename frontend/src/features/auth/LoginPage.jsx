@@ -46,10 +46,10 @@ export default function LoginPage({ onLogin }) {
         <section className="login-hero">
           <div className="login-brand">
             <span className="logo">
-              <Icon name="grid" />
+              <img src="/scanly-mark.png" alt="" width="46" height="46" />
             </span>
             <div>
-              <b>LacoQR</b>
+              <b>Scanly</b>
               <small>Dynamic QR Attendance</small>
             </div>
           </div>
@@ -113,7 +113,7 @@ export default function LoginPage({ onLogin }) {
               </button>
             </form>
 
-            <p className="login-footer">LacoQR · College of Information Technology</p>
+            <p className="login-footer">Scanly · College of Information Technology</p>
           </div>
         </section>
       </div>

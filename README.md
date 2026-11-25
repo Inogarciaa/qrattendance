@@ -1,4 +1,4 @@
-# LacoQR — Dynamic QR Attendance System
+# Scanly — Dynamic QR Attendance System
 
 A real-time event attendance platform based on the thesis proposal
 **"Real-Time Event Attendance Management System Using Dual Dynamic QR Codes with

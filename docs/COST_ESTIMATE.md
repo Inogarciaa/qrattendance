@@ -1,7 +1,7 @@
 # Developmental and Operating Cost Estimate
 
 This document estimates the **developmental cost** (one-time build cost) and the
-**operating cost** (recurring cost) of LacoQR, the dynamic QR attendance system
+**operating cost** (recurring cost) of Scanly, the dynamic QR attendance system
 described in `README.md`, `docs/PROJECT_ANALYSIS.md`, and `docs/DATA_MODEL.md`.
 
 All amounts are in **Philippine pesos (₱)**. No foreign-currency column is used.

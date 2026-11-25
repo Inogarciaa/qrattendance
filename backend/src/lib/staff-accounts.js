@@ -8,7 +8,7 @@ function staffAccounts() {
   return [
     {
       school_id: "SUPERADMIN-0001",
-      full_name: "LacoQR Superadmin",
+      full_name: "Scanly Superadmin",
       email: process.env.SUPERADMIN_EMAIL || "superadmin@example.com",
       password: process.env.SUPERADMIN_PASSWORD || "change-me-superadmin",
       role: "superadmin",
@@ -18,7 +18,7 @@ function staffAccounts() {
     },
     {
       school_id: "ADMIN-0001",
-      full_name: "LacoQR Admin",
+      full_name: "Scanly Admin",
       email: process.env.ADMIN_EMAIL || "admin@example.com",
       password: process.env.ADMIN_PASSWORD || "change-me-admin",
       role: "admin",

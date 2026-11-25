@@ -1,4 +1,4 @@
-# LacoQR Web Dashboard
+# Scanly Web Dashboard
 
 React + Vite dashboard for **superadmin** and **admin** users.
 

@@ -1,6 +1,6 @@
-# LacoQR Mobile
+# Scanly Mobile
 
-The student and organizer app for **LacoQR**, the dynamic QR attendance system for
+The student and organizer app for **Scanly**, the dynamic QR attendance system for
 LCCB. It runs in **Expo Go** on Android and iPhone, and talks to the real Express
 API in `../backend` — there is no mock data in this app.
 

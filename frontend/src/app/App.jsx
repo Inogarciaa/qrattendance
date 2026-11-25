@@ -134,7 +134,7 @@ export default function App() {
           <h2 style={{ fontSize: 19, fontWeight: 800, marginBottom: 8 }}>Staff access only</h2>
           <p style={{ margin: "0 0 20px", color: "var(--text-muted)", lineHeight: 1.6 }}>
             The web dashboard is for administrators. Students and organizers use the
-            LacoQR mobile app to check in and scan.
+            Scanly mobile app to check in and scan.
           </p>
           <button type="button" className="btn p" onClick={signOut}>
             Sign out
@@ -176,9 +176,9 @@ export default function App() {
         <div className="side-top">
           <div className="brand">
             <span className="logo">
-              <Icon name="grid" />
+              <img src="/scanly-mark.png" alt="" width="34" height="34" />
             </span>
-            <span>LacoQR</span>
+            <span>Scanly</span>
           </div>
           <div className="grp">Menu</div>
           {mainNav.map(renderNavItem)}
