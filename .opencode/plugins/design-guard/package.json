@@ -1,0 +1,12 @@
+{
+  "name": "design-guard",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}

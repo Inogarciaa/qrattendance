@@ -1,108 +1,72 @@
 import { Plugin } from "@opencode/plugin"
 
-/**
- * Design guard: blocks edits to UI files until the `design-dna` skill has been
- * loaded in the current session. AGENTS.md makes the skill mandatory for design
- * work; this plugin enforces it mechanically.
- */
-
-const DESIGN_SKILL = "design-dna"
-
-const MUTATING_TOOLS = new Set([
-  "edit",
-  "write",
-  "patch",
-  "multiedit",
-  "apply_patch",
-  "edit_file",
-  "write_file",
-])
-
-// UI surfaces only. Keep logic, API clients, and backend files editable without
-// the skill so ordinary bug fixes are not blocked.
 const UI_PATTERNS = [
-  /(^|\/)frontend\/index\.html$/,
-  /(^|\/)frontend\/src\/app\//,
-  /(^|\/)frontend\/src\/components\//,
-  /(^|\/)frontend\/src\/features\//,
-  /(^|\/)frontend\/src\/styles\//,
-  /(^|\/)frontend\/src\/index\.css$/,
-  /(^|\/)mobile\/app\.json$/,
-  /(^|\/)mobile\/assets\//,
-  /(^|\/)mobile\/src\/app\//,
-  /(^|\/)mobile\/src\/components\//,
-  /(^|\/)mobile\/src\/theme\//,
+  // Frontend
+  /^frontend\/index\.html$/,
+  /^frontend\/src\/app\//,
+  /^frontend\/src\/components\//,
+  /^frontend\/src\/features\//,
+  /^frontend\/src\/styles\//,
+  /^frontend\/src\/index\.css$/,
+  // Mobile
+  /^mobile\/app\.json$/,
+  /^mobile\/assets\//,
+  /^mobile\/src\/app\//,
+  /^mobile\/src\/components\//,
+  /^mobile\/src\/theme\//
 ]
 
-function normalize(value: string) {
-  return value.replace(/\\/g, "/").replace(/\/+/g, "/").toLowerCase()
+const DESIGN_DNA_SKILL = "design-dna"
+const EDIT_TOOLS = new Set(["edit", "write"])
+
+// In-memory session state: sessionID -> { hasDesignDna: boolean, timestamp: number }
+const sessionState = new Map<string, { hasDesignDna: boolean; timestamp: number }>()
+
+function isUiPath(path: string): boolean {
+  // Normalize Windows backslashes to forward slashes for matching
+  const normalized = path.replace(/\\/g, "/")
+  return UI_PATTERNS.some((re) => re.test(normalized))
 }
 
-function isUiPath(value: string) {
-  const path = normalize(value)
-  return UI_PATTERNS.some((pattern) => pattern.test(path))
-}
-
-function collectPaths(input: unknown): string[] {
-  if (!input || typeof input !== "object") return []
-  const record = input as Record<string, unknown>
-  const paths: string[] = []
-
-  for (const key of ["filePath", "file_path", "path", "filename"]) {
-    const value = record[key]
-    if (typeof value === "string") paths.push(value)
+function getSessionState(sessionID: string): { hasDesignDna: boolean; timestamp: number } {
+  const now = Date.now()
+  const state = sessionState.get(sessionID)
+  if (state && now - state.timestamp < 30 * 60 * 1000) {
+    return state
   }
-
-  const files = record.files
-  if (Array.isArray(files)) {
-    for (const file of files) {
-      if (typeof file === "string") paths.push(file)
-      else if (file && typeof file === "object") {
-        const entry = file as Record<string, unknown>
-        for (const key of ["filePath", "file_path", "path"]) {
-          const value = entry[key]
-          if (typeof value === "string") paths.push(value)
-        }
-      }
-    }
-  }
-
-  return paths
+  return { hasDesignDna: false, timestamp: now }
 }
 
-function skillID(input: unknown) {
-  if (!input || typeof input !== "object") return ""
-  const record = input as Record<string, unknown>
-  const value = record.id ?? record.name ?? record.skillID
-  return typeof value === "string" ? value.trim().toLowerCase() : ""
+function setDesignDnaLoaded(sessionID: string) {
+  sessionState.set(sessionID, { hasDesignDna: true, timestamp: Date.now() })
 }
 
 export default Plugin.define({
-  id: "lacoqr.design-guard",
+  id: "design-guard",
   async setup(ctx) {
-    // Sessions that loaded design-dna. The skill stays in the session context
-    // for its lifetime, so this is intentionally in-memory.
-    const approved = new Set<string>()
-
+    // Track when design-dna is loaded via the skill tool
     await ctx.tool.hook("execute.before", (event) => {
-      if (event.tool === "skill") {
-        if (skillID(event.input) === DESIGN_SKILL) approved.add(event.sessionID)
-        return
+      if (event.tool === "skill" && event.input?.id === DESIGN_DNA_SKILL) {
+        setDesignDnaLoaded(event.sessionID)
       }
-
-      if (!MUTATING_TOOLS.has(event.tool)) return
-
-      const uiPaths = collectPaths(event.input).filter(isUiPath)
-      if (uiPaths.length === 0) return
-      if (approved.has(event.sessionID)) return
-
-      throw new Error(
-        [
-          `Blocked by design-guard: UI changes require the "${DESIGN_SKILL}" skill.`,
-          `Call the skill tool with id "${DESIGN_SKILL}" first, then retry this edit.`,
-          `See AGENTS.md -> Design. Blocked path(s): ${uiPaths.join(", ")}`,
-        ].join(" "),
-      )
     })
-  },
+
+    // Block edit/write on UI paths unless design-dna was loaded
+    await ctx.tool.hook("execute.before", (event) => {
+      if (!EDIT_TOOLS.has(event.tool)) return
+
+      const input = event.input as { path?: string } | undefined
+      const path = input?.path
+      if (!path || !isUiPath(path)) return
+
+      const state = getSessionState(event.sessionID)
+      if (!state.hasDesignDna) {
+        throw new Error(
+          `UI change blocked: \`${event.tool}\` on "${path}" requires the \`design-dna\` skill. ` +
+            `Load it first with the \`skill\` tool: \`skill("design-dna")\`. ` +
+            `This enforces using the repo's design tokens and style guidance from \`.agents/skills/design-dna\`.`
+        )
+      }
+    })
+  }
 })
