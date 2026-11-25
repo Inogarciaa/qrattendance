@@ -72,3 +72,15 @@ the repo. `design-dna` is this repo's design reference and is required for any
 UI or design work — load it with the `skill` tool before touching screens,
 tokens, or styles. Global skills live in `~/.agents/skills/` (for example
 `find-skills`).
+
+This is enforced by `.opencode/plugins/design-guard`: it blocks `edit` and
+`write` on UI paths until `design-dna` is loaded in the current session. Gated
+paths:
+
+- `frontend/index.html`, `frontend/src/app/`, `frontend/src/components/`,
+  `frontend/src/features/`, `frontend/src/styles/`, `frontend/src/index.css`
+- `mobile/app.json`, `mobile/assets/`, `mobile/src/app/`,
+  `mobile/src/components/`, `mobile/src/theme/`
+
+Logic files such as `frontend/src/lib/`, `mobile/src/api/`, `mobile/src/lib/`,
+and all of `backend/` stay editable without the skill.
