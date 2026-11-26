@@ -46,11 +46,10 @@ export default function LoginPage({ onLogin }) {
         <section className="login-hero">
           <div className="login-brand">
             <span className="logo">
-              <img src="/scanly-mark.png" alt="" width="46" height="46" />
+              <img src="/scanly-mark.png" alt="" width="68" height="68" />
             </span>
             <div>
               <b>Scanly</b>
-              <small>Dynamic QR Attendance</small>
             </div>
           </div>
 
@@ -63,12 +62,6 @@ export default function LoginPage({ onLogin }) {
             Secure, rotating QR codes for every event — built for the students
             and organizers of LCCB.
           </p>
-
-          <div className="login-badges">
-            <span>Anti-proxy</span>
-            <span>30s rotation</span>
-            <span>Real-time</span>
-          </div>
         </section>
 
         <section className="login-panel">
