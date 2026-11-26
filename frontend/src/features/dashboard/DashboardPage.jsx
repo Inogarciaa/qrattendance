@@ -127,7 +127,11 @@ export default function DashboardPage({ onNavigate, user, toast }) {
       fetchEvents(),
     ]);
     setDashboard(liveData);
-    setEvents(eventData.events || []);
+    // Filter out completed and cancelled events from the active dashboard tab bar
+    const activeEvents = (eventData.events || []).filter(
+      (event) => !["closed", "completed", "cancelled"].includes(event.status)
+    );
+    setEvents(activeEvents);
     setError("");
     return { liveData, eventData };
   }, []);

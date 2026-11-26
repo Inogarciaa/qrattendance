@@ -6,6 +6,7 @@ import ActivityPage from "../features/activity/ActivityPage";
 import CreateEventPage from "../features/events/CreateEventPage";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import ApprovalsPage from "../features/approvals/ApprovalsPage";
+import EventHistoryPage from "../features/events/EventHistoryPage";
 import HelpPage from "../features/help/HelpPage";
 import LoginPage from "../features/auth/LoginPage";
 import ReportsPage from "../features/reports/ReportsPage";
@@ -16,6 +17,7 @@ import { clearSession, fetchMe, loadSession } from "../lib/api";
 const MAIN_NAV = [
   { label: "Dashboard", icon: "grid" },
   { label: "Reports", icon: "rep" },
+  { label: "History", icon: "hist" },
   { label: "Create Event", icon: "cal" },
   { label: "Students", icon: "usr" },
   { label: "Approvals", icon: "uc" },
@@ -149,6 +151,7 @@ export default function App() {
   const pages = {
     Dashboard: <DashboardPage onNavigate={navigate} user={user} toast={setToastMessage} />,
     Reports: <ReportsPage toast={setToastMessage} />,
+    History: <EventHistoryPage onNavigate={navigate} />,
     "Create Event": <CreateEventPage toast={setToastMessage} />,
     Students: <SearchStudentsPage user={user} toast={setToastMessage} />,
     Approvals: <ApprovalsPage />,
