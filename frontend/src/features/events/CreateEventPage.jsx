@@ -135,7 +135,7 @@ export default function CreateEventPage({ toast }) {
   );
 
   const timeDropdowns = (prefix) => (
-    <div style={{ display: "flex", gap: "8px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px" }}>
       <select value={form[`${prefix}Hour`]} onChange={update(`${prefix}Hour`)}>
         {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
           <option key={h} value={h}>{h}</option>
@@ -463,9 +463,16 @@ export default function CreateEventPage({ toast }) {
       )}
 
       <div className="card">
-        <h2>Event details</h2>
-        <p>What students will see for this event.</p>
-        <div className="g">
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+          <div className="kpi-icon" style={{ width: 36, height: 36, background: "var(--brand-light)", color: "var(--brand)", borderRadius: 10 }}>
+            <Icon name="cal" size={18} />
+          </div>
+          <div>
+            <h2>Event details</h2>
+            <p style={{ margin: 0 }}>What students will see for this event.</p>
+          </div>
+        </div>
+        <div className="g" style={{ marginTop: 20 }}>
           <Field id="name" label="Event name" required error={errors.name} full>
             {input("name", "text", "e.g. Cybersecurity Awareness Seminar")}
           </Field>
@@ -475,6 +482,7 @@ export default function CreateEventPage({ toast }) {
               placeholder="Short summary of the event"
               value={form.description}
               onChange={update("description")}
+              rows={3}
             />
           </Field>
           <Field id="venue" label="Venue" required error={errors.venue} full>
