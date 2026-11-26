@@ -127,10 +127,23 @@ export default function DashboardPage({ onNavigate, user, toast }) {
       fetchEvents(),
     ]);
     setDashboard(liveData);
-    // Only show live or scheduled events
-    const activeEvents = (eventData.events || []).filter(
-      (event) => ["live", "scheduled"].includes(event.status)
-    );
+    // Only show live or scheduled events that haven't ended yet
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const currentTime = now.toLocaleTimeString("en-GB", { hour12: false }).slice(0, 5);
+
+    const activeEvents = (eventData.events || []).filter((event) => {
+      // Must be live or scheduled
+      if (!["live", "scheduled"].includes(event.status)) return false;
+      
+      // If date is in the past, it's not active anymore
+      if (event.event_date < today) return false;
+      
+      // If it's today, check if the end time has passed
+      if (event.event_date === today && event.end_time < currentTime) return false;
+      
+      return true;
+    });
     setEvents(activeEvents);
     setError("");
     return { liveData, eventData };

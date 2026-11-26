@@ -50,10 +50,17 @@ export default function EventHistoryPage({ onNavigate }) {
     setError("");
     try {
       const data = await fetchEvents();
-      // Completed, closed, or cancelled events
-      const finished = (data.events || []).filter((e) =>
-        ["closed", "completed", "cancelled"].includes(e.status)
-      );
+      // Completed, closed, or cancelled events, or events whose date/time has passed
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+      const currentTime = now.toLocaleTimeString("en-GB", { hour12: false }).slice(0, 5);
+
+      const finished = (data.events || []).filter((e) => {
+        if (["closed", "completed", "cancelled"].includes(e.status)) return true;
+        if (e.event_date < today) return true;
+        if (e.event_date === today && e.end_time < currentTime) return true;
+        return false;
+      });
       setEvents(finished);
     } catch (err) {
       setError(err.message || "Could not load event history.");
