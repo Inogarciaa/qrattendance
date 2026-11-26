@@ -72,12 +72,12 @@ export default function LoginPage({ onLogin }) {
             </p>
 
             <form onSubmit={submit} noValidate>
-              <Field id="login-email" label="Email address">
+              <Field id="login-email" label="Email">
                 <input
                   id="login-email"
                   type="email"
                   autoComplete="username"
-                  placeholder="you@example.com"
+                  placeholder="Enter you email"
                   value={form.email}
                   onChange={update("email")}
                 />
