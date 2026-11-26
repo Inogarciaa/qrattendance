@@ -581,7 +581,14 @@ export default function DashboardPage({ onNavigate, user, toast }) {
             attendance automatically when an event starts.
           </div>
 
-          {dashboard?.next ? (
+          {events.length === 0 ? (
+            <div className="db-empty" style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--br)", textAlign: "left" }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>No upcoming events</div>
+              <div style={{ color: "var(--mu)", fontSize: 13, marginTop: 4 }}>
+                There are no scheduled events on or after today.
+              </div>
+            </div>
+          ) : dashboard?.next ? (
             <div
               style={{
                 marginTop: 18,
@@ -610,19 +617,7 @@ export default function DashboardPage({ onNavigate, user, toast }) {
                 {dashboard.next.venue}
               </div>
             </div>
-          ) : (
-            <div
-              style={{
-                marginTop: 18,
-                paddingTop: 16,
-                borderTop: "1px solid var(--br)",
-                color: "var(--mu)",
-                fontSize: 13,
-              }}
-            >
-              Nothing scheduled for today or later.
-            </div>
-          )}
+          ) : null}
 
           <button
             type="button"
