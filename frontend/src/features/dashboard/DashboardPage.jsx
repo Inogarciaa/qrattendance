@@ -127,9 +127,9 @@ export default function DashboardPage({ onNavigate, user, toast }) {
       fetchEvents(),
     ]);
     setDashboard(liveData);
-    // Filter out completed and cancelled events from the active dashboard tab bar
+    // Only show live or scheduled events
     const activeEvents = (eventData.events || []).filter(
-      (event) => !["closed", "completed", "cancelled"].includes(event.status)
+      (event) => ["live", "scheduled"].includes(event.status)
     );
     setEvents(activeEvents);
     setError("");
