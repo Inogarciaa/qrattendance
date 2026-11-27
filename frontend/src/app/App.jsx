@@ -224,9 +224,6 @@ export default function App() {
             <Icon name="mnu" />
           </button>
           <div className="me">
-            <div>
-              <b>{user.full_name}</b>
-            </div>
             <span className="role-pill">{user.role}</span>
           </div>
         </header>
