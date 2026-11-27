@@ -44,6 +44,17 @@ export default function EventHistoryPage({ onNavigate }) {
   const [eventDetail, setEventDetail] = useState(null);
   const [records, setRecords] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalEventId, setModalEventId] = useState(null);
+
+  const openModal = (eventId) => {
+    setModalEventId(eventId);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,6 +144,99 @@ export default function EventHistoryPage({ onNavigate }) {
     ];
   });
 
+  const modalContent = (
+    <>
+      <div className="modal-header">
+        <h2>
+          {modalEventId && events.find((e) => e.id === modalEventId)?.name}
+        </h2>
+        <div className="actions">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              if (modalEventId) {
+                viewEventDetail(modalEventId);
+                closeModal();
+              }
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div className="modal-content">
+        {selectedEventId === modalEventId && eventDetail && (
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="row" style={{ marginBottom: 16 }}>
+              <div>
+                <h2 style={{ fontWeight: 700, fontSize: 16 }}>
+                  Attendance Records: {eventDetail.name}
+                </h2>
+                <p style={{ margin: 0, color: "var(--mu)", fontSize: 13 }}>
+                  {formatDate(eventDetail.event_date)} ·
+                  {eventDetail.venue || "No venue"}
+                </p>
+              </div>
+            </div>
+
+            {detailLoading ? (
+              <p style={{ color: "var(--mu)" }}>Loading student records…</p>
+            ) : (
+              <div className="tw">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>School ID</th>
+                      <th>Program</th>
+                      <th>Status</th>
+                      <th>Time Scanned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.map((rec) => (
+                      <tr key={rec.id}>
+                        <td>{rec.student?.full_name || "—"}</td>
+                        <td>{rec.student?.school_id || "—"}</td>
+                        <td>{rec.student?.program?.code || "—"}</td>
+                        <td>
+                          <StatusBadge status={capitalize(rec.status)} />
+                        </td>
+                        <td style={{ fontSize: 13, color: "var(--mu)" }}>
+                          {rec.scanned_at
+                            ? new Date(rec.scanned_at).toLocaleTimeString("en-PH", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                    {records.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          style={{
+                            textAlign: "center",
+                            padding: "24px 0",
+                            color: "var(--mu)",
+                          }}
+                        >
+                          No attendance records logged for this event.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <>
       <PageHeader
@@ -153,6 +257,15 @@ export default function EventHistoryPage({ onNavigate }) {
           </Field>
           <button type="button" className="btn" onClick={() => load()} disabled={loading}>
             {loading ? "Refreshing…" : "Refresh"}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => openModal(selectedEventId || events[0]?.id)}
+            disabled={loading}
+            style={{ marginLeft: 8 }}
+          >
+            Maximize
           </button>
         </div>
         {error && (
@@ -229,9 +342,9 @@ export default function EventHistoryPage({ onNavigate }) {
                       <td style={{ fontSize: 13, color: "var(--mu)" }}>
                         {rec.scanned_at
                           ? new Date(rec.scanned_at).toLocaleTimeString("en-PH", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
                           : "—"}
                       </td>
                     </tr>
@@ -247,6 +360,22 @@ export default function EventHistoryPage({ onNavigate }) {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {isModalOpen && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            {modalContent}
+          </div>
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={closeModal}
+            aria-label="Close modal"
+          >
+            ✕
+          </button>
         </div>
       )}
     </>

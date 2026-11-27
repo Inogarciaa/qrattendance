@@ -30,6 +30,7 @@ export default function SearchStudentsPage({ user, toast }) {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetchPrograms()
@@ -145,6 +146,15 @@ export default function SearchStudentsPage({ user, toast }) {
           <button type="button" className="btn p" onClick={submit} disabled={searching}>
             {searching ? "Searching…" : "Search students"}
           </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setIsModalOpen(true)}
+            disabled={results === null || results.length === 0}
+            style={{ marginLeft: 8 }}
+          >
+            Maximize
+          </button>
         </div>
         {error && (
           <p style={{ margin: "12px 0 0", color: "#dc2626", fontSize: 13 }} role="alert">
@@ -196,6 +206,76 @@ export default function SearchStudentsPage({ user, toast }) {
           </>
         )}
       </div>
+
+      {isModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Student List</h2>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="modal-content">
+              {results === null ? (
+                <p style={{ margin: 0, color: "var(--mu)" }}>
+                  Enter a name, ID number, or email and select Search students.
+                </p>
+              ) : (
+                <>
+                  <p style={{ margin: "0 0 14px", color: "var(--mu)", fontSize: 13 }}>
+                    {results.length} student{results.length === 1 ? "" : "s"} found
+                  </p>
+                  <DataTable
+                    columns={columns}
+                    rows={results.map((student) => {
+                      const cells = [
+                        <span className="who" key={student.id}>
+                          <Avatar name={student.full_name} photoUrl={student.photo_url} />
+                          {student.full_name}
+                        </span>,
+                        student.school_id,
+                        student.email || "—",
+                        student.program?.code || "—",
+                        attendanceSummary(history[student.id]),
+                      ];
+                      if (isSuperadmin) {
+                        cells.push(
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ padding: "6px 12px", fontSize: 12 }}
+                            onClick={() => archiveStudent(student)}
+                            disabled={busyId === student.id}
+                          >
+                            {busyId === student.id ? "Archiving…" : "Archive"}
+                          </button>
+                        );
+                      }
+                      return cells;
+                    })}
+                    emptyMessage="No students match these filters."
+                  />
+                </>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={() => setIsModalOpen(false)}
+            aria-label="Close modal"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </>
   );
 }
