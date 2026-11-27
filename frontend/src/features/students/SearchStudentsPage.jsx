@@ -239,7 +239,7 @@ export default function SearchStudentsPage({ user, toast }) {
                       ID: {selectedStudent.school_id}
                     </p>
                     <p style={{ margin: 0, color: "var(--mu)", fontSize: 13 }}>
-                      Program: {selectedStudent.program?.code || "—"}
+                      Department: {selectedStudent.program?.name || "—"}
                     </p>
                   </div>
                 </div>
