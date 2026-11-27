@@ -91,7 +91,7 @@ export default function SearchStudentsPage({ user, toast }) {
     }
   };
 
-  const columns = ["Student"];
+  const columns = ["Student", "Department"];
 
   const openStudentModal = (student) => {
     setSelectedStudent(student);
@@ -198,7 +198,7 @@ export default function SearchStudentsPage({ user, toast }) {
                     {student.full_name}
                   </span>
                 );
-                return [nameCell];
+                return [nameCell, student.program?.name || "—"];
               })}
               emptyMessage="No students match these filters."
             />
