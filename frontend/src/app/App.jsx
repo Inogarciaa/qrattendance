@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import Icon from "../components/ui/Icon";
-import Avatar from "../components/ui/Avatar";
 import ArchivePage from "../features/archive/ArchivePage";
 import ActivityPage from "../features/activity/ActivityPage";
 import CreateEventPage from "../features/events/CreateEventPage";
@@ -225,7 +224,6 @@ export default function App() {
             <Icon name="mnu" />
           </button>
           <div className="me">
-            <Avatar name={user.full_name} photoUrl={user.photo_url} size="md" />
             <div>
               <b>{user.full_name}</b>
             </div>
