@@ -866,29 +866,18 @@ label,
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 100%;
+  table-layout: fixed;
 }
 
 th,
 td {
   text-align: left;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 12px;
-  /* Remove max-width: 0 - let columns size to content */
-}
-
-/* Allow venue column (3rd) to wrap since venue names are often long */
-td:nth-child(3),
-th:nth-child(3) {
   white-space: normal;
+  overflow-wrap: anywhere;
   word-break: break-word;
-  overflow: visible;
-  text-overflow: clip;
-  max-width: 180px;
 }
 
 th {
