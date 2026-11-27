@@ -5,6 +5,7 @@ import PageHeader from "../../components/ui/PageHeader";
 import Avatar from "../../components/ui/Avatar";
 import {
   archiveEntity,
+  fetchPrograms,
   fetchStudentAttendance,
   searchStudents,
 } from "../../lib/api";
@@ -93,6 +94,12 @@ export default function SearchStudentsPage({ user, toast }) {
 
   const columns = ["Student", "Department"];
 
+  useEffect(() => {
+    fetchPrograms()
+      .then((data) => setPrograms(data.programs || []))
+      .catch(() => setPrograms([]));
+  }, []);
+
   const openStudentModal = (student) => {
     setSelectedStudent(student);
     setIsModalOpen(true);
@@ -144,15 +151,6 @@ export default function SearchStudentsPage({ user, toast }) {
         <div className="acts">
           <button type="button" className="btn p" onClick={submit} disabled={searching}>
             {searching ? "Searching…" : "Search students"}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setIsModalOpen(true)}
-            disabled={results === null || results.length === 0}
-            style={{ marginLeft: 8 }}
-          >
-            Maximize
           </button>
         </div>
 
@@ -266,7 +264,7 @@ export default function SearchStudentsPage({ user, toast }) {
               {isSuperadmin && (
                 <button
                   type="button"
-                  className="btn"
+                  className="btn danger"
                   style={{ padding: "8px 16px" }}
                   onClick={() => archiveStudent(selectedStudent)}
                   disabled={busyId === selectedStudent.id}

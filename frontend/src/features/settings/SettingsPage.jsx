@@ -574,7 +574,7 @@ export default function SettingsPage({ user, setUser, toast }) {
                       {isSuperadmin && (
                         <button
                           type="button"
-                          className="btn"
+                          className="btn danger"
                           onClick={() => removeGroup(group)}
                           disabled={groupBusy}
                         >

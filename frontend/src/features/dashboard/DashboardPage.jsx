@@ -667,8 +667,8 @@ export default function DashboardPage({ onNavigate, user, toast }) {
                 {isSuperadmin && selectedEvent && (
                   <button
                     type="button"
-                    className="db-hero-action"
-                    style={{ marginLeft: 8, borderColor: "#ef4444", color: "#ef4444" }}
+                    className="btn danger"
+                    style={{ marginLeft: 8 }}
                     onClick={archiveEvent}
                     disabled={archiveBusy}
                   >
