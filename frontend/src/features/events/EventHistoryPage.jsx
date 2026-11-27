@@ -146,7 +146,7 @@ export default function EventHistoryPage({ onNavigate }) {
             <input
               id="history-query"
               type="text"
-              placeholder="Search by event name, venue, or date (YYYY-MM-DD)…"
+              placeholder="By event name, venue, or date"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -229,9 +229,9 @@ export default function EventHistoryPage({ onNavigate }) {
                       <td style={{ fontSize: 13, color: "var(--mu)" }}>
                         {rec.scanned_at
                           ? new Date(rec.scanned_at).toLocaleTimeString("en-PH", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
                           : "—"}
                       </td>
                     </tr>
