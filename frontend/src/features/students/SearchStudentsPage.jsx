@@ -5,7 +5,6 @@ import PageHeader from "../../components/ui/PageHeader";
 import Avatar from "../../components/ui/Avatar";
 import {
   archiveEntity,
-  fetchPrograms,
   fetchStudentAttendance,
   searchStudents,
 } from "../../lib/api";
@@ -31,12 +30,7 @@ export default function SearchStudentsPage({ user, toast }) {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  useEffect(() => {
-    fetchPrograms()
-      .then((data) => setPrograms(data.programs || []))
-      .catch(() => setPrograms([]));
-  }, []);
+  const [selectedStudent, setSelectedStudent] = useState(null);
 
   const runSearch = useCallback(async (nextFilters) => {
     setSearching(true);
@@ -88,6 +82,7 @@ export default function SearchStudentsPage({ user, toast }) {
       setResults((current) =>
         (current || []).filter((row) => row.id !== student.id)
       );
+      setHistory((prev) => ({ ...prev, [student.id]: null }));
       toast?.(`${student.full_name} archived.`);
     } catch (err) {
       setError(err.message || "Could not archive this student.");
@@ -96,9 +91,17 @@ export default function SearchStudentsPage({ user, toast }) {
     }
   };
 
-  const columns = isSuperadmin
-    ? ["Student", "ID number", "Email", "Program", "Attendance", ""]
-    : ["Student", "ID number", "Email", "Program", "Attendance"];
+  const columns = ["Student"];
+
+  const openStudentModal = (student) => {
+    setSelectedStudent(student);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedStudent(null);
+  };
 
   return (
     <>
@@ -108,12 +111,7 @@ export default function SearchStudentsPage({ user, toast }) {
       />
 
       <div className="card">
-        <div
-          className="gf"
-          onKeyDown={(event) =>
-            event.key === "Enter" && event.target.tagName === "INPUT" && submit()
-          }
-        >
+        <div className="gf">
           <Field id="query" label="Name, ID number, or email">
             <input
               id="query"
@@ -142,6 +140,7 @@ export default function SearchStudentsPage({ user, toast }) {
             </select>
           </Field>
         </div>
+
         <div className="acts">
           <button type="button" className="btn p" onClick={submit} disabled={searching}>
             {searching ? "Searching…" : "Search students"}
@@ -156,6 +155,7 @@ export default function SearchStudentsPage({ user, toast }) {
             Maximize
           </button>
         </div>
+
         {error && (
           <p style={{ margin: "12px 0 0", color: "#dc2626", fontSize: 13 }} role="alert">
             {error}
@@ -176,30 +176,29 @@ export default function SearchStudentsPage({ user, toast }) {
             <DataTable
               columns={columns}
               rows={results.map((student) => {
-                const cells = [
-                  <span className="who" key={student.id}>
+                const nameCell = (
+                  <span
+                    className="who"
+                    key={student.id}
+                    style={{
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      color: "var(--mu-dark, #1e293b)",
+                      transition: "color 0.2s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = "var(--primary, #4f46e5)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = "var(--mu-dark, #1e293b)";
+                    }}
+                    onClick={() => openStudentModal(student)}
+                  >
                     <Avatar name={student.full_name} photoUrl={student.photo_url} />
                     {student.full_name}
-                  </span>,
-                  student.school_id,
-                  student.email || "—",
-                  student.program?.code || "—",
-                  attendanceSummary(history[student.id]),
-                ];
-                if (isSuperadmin) {
-                  cells.push(
-                    <button
-                      type="button"
-                      className="btn"
-                      style={{ padding: "6px 12px", fontSize: 12 }}
-                      onClick={() => archiveStudent(student)}
-                      disabled={busyId === student.id}
-                    >
-                      {busyId === student.id ? "Archiving…" : "Archive"}
-                    </button>
-                  );
-                }
-                return cells;
+                  </span>
+                );
+                return [nameCell];
               })}
               emptyMessage="No students match these filters."
             />
@@ -207,69 +206,80 @@ export default function SearchStudentsPage({ user, toast }) {
         )}
       </div>
 
-      {isModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+      {isModalOpen && selectedStudent && (
+        <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Student List</h2>
+              <h2>
+                {selectedStudent.full_name}
+              </h2>
               <div className="actions">
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeModal}
                 >
                   Close
                 </button>
               </div>
             </div>
             <div className="modal-content">
-              {results === null ? (
-                <p style={{ margin: 0, color: "var(--mu)" }}>
-                  Enter a name, ID number, or email and select Search students.
-                </p>
-              ) : (
-                <>
-                  <p style={{ margin: "0 0 14px", color: "var(--mu)", fontSize: 13 }}>
-                    {results.length} student{results.length === 1 ? "" : "s"} found
-                  </p>
-                  <DataTable
-                    columns={columns}
-                    rows={results.map((student) => {
-                      const cells = [
-                        <span className="who" key={student.id}>
-                          <Avatar name={student.full_name} photoUrl={student.photo_url} />
-                          {student.full_name}
-                        </span>,
-                        student.school_id,
-                        student.email || "—",
-                        student.program?.code || "—",
-                        attendanceSummary(history[student.id]),
-                      ];
-                      if (isSuperadmin) {
-                        cells.push(
-                          <button
-                            type="button"
-                            className="btn"
-                            style={{ padding: "6px 12px", fontSize: 12 }}
-                            onClick={() => archiveStudent(student)}
-                            disabled={busyId === student.id}
-                          >
-                            {busyId === student.id ? "Archiving…" : "Archive"}
-                          </button>
-                        );
-                      }
-                      return cells;
-                    })}
-                    emptyMessage="No students match these filters."
+              <div className="card" style={{ marginBottom: 24 }}>
+                <div className="row" style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <Avatar
+                    name={selectedStudent.full_name}
+                    photoUrl={selectedStudent.photo_url}
+                    size="lg"
                   />
-                </>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 16 }}>
+                      {selectedStudent.full_name}
+                    </h3>
+                    <p style={{ margin: "4px 0", color: "var(--mu)", fontSize: 13 }}>
+                      ID: {selectedStudent.school_id}
+                    </p>
+                    <p style={{ margin: 0, color: "var(--mu)", fontSize: 13 }}>
+                      Program: {selectedStudent.program?.code || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 16 }}>
+                  <p style={{ margin: "0 0 8px", color: "var(--mu)", fontSize: 12 }}>
+                    Email
+                  </p>
+                  <p style={{ margin: 0, fontSize: 13 }}>
+                    {selectedStudent.email || "—"}
+                  </p>
+                </div>
+
+                <div style={{ marginTop: 16 }}>
+                  <p style={{ margin: "0 0 8px", color: "var(--mu)", fontSize: 12 }}>
+                    Attendance
+                  </p>
+                  <p style={{ margin: 0, fontSize: 13 }}>
+                    {attendanceSummary(history[selectedStudent.id])}
+                  </p>
+                </div>
+              </div>
+
+              {isSuperadmin && (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ padding: "8px 16px" }}
+                  onClick={() => archiveStudent(selectedStudent)}
+                  disabled={busyId === selectedStudent.id}
+                >
+                  {busyId === selectedStudent.id ? "Archiving…" : "Archive Student"}
+                </button>
               )}
             </div>
           </div>
           <button
             type="button"
             className="modal-close-btn"
-            onClick={() => setIsModalOpen(false)}
+            onClick={closeModal}
             aria-label="Close modal"
           >
             ✕
