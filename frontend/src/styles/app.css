@@ -878,7 +878,7 @@ td {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
-  max-width: 0;
+  /* Remove max-width: 0 - let columns size to content */
 }
 
 /* Allow venue column (3rd) to wrap since venue names are often long */
